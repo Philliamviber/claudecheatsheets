@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Azure AI Foundry — Architecture Deep Dive</title>
+<meta name="description" content="An interactive, AZ-500 / CISSP-level deep dive into Azure AI Foundry: how Microsoft's AI footprint extends to Foundry, identity and network architecture, Azure Landing Zone integration, and Well-Architected Framework alignment." />
+<style>
+  :root {
+    --bg: #0b1020;
+    --bg-2: #11182e;
+    --panel: #151d36;
+    --panel-2: #1b2542;
+    --line: #2a3556;
+    --txt: #e7ecf6;
+    --muted: #9aa6c4;
+    --accent: #4cc2ff;       /* azure cyan */
+    --accent-2: #7c5cff;     /* identity violet */
+    --accent-3: #36d399;     /* secure green */
+    --accent-4: #ffb454;     /* warn amber */
+    --accent-5: #ff6b81;     /* risk red */
+    --shadow: 0 12px 40px rgba(0,0,0,.45);
+    --radius: 14px;
+    --mono: "Cascadia Code", "SF Mono", Consolas, monospace;
+    --sans: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; font-family: var(--sans); color: var(--txt);
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(76,194,255,.12), transparent 60%),
+      radial-gradient(900px 500px at 0% 10%, rgba(124,92,255,.12), transparent 55%),
+      var(--bg);
+    line-height: 1.6;
+  }
+  a { color: var(--accent); }
+
+  /* ---- Layout ---- */
+  header.hero {
+    padding: 64px 28px 40px; max-width: 1180px; margin: 0 auto; position: relative;
+  }
+  .eyebrow {
+    display:inline-flex; align-items:center; gap:8px;
+    font-size:.8rem; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--accent); background:rgba(76,194,255,.08);
+    border:1px solid var(--line); padding:6px 14px; border-radius:999px;
+  }
+  h1 { font-size: clamp(2.1rem, 4.5vw, 3.4rem); line-height:1.08; margin:18px 0 10px; letter-spacing:-.02em; }
+  h1 .grad {
+    background: linear-gradient(100deg, var(--accent), var(--accent-2) 70%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .lede { font-size:1.15rem; color:var(--muted); max-width: 760px; }
+  .assume {
+    margin-top: 22px; display:flex; flex-wrap:wrap; gap:10px;
+  }
+  .assume span {
+    font-size:.78rem; color:var(--muted); border:1px dashed var(--line);
+    padding:5px 12px; border-radius:8px; background:rgba(255,255,255,.02);
+  }
+
+  /* ---- Sticky nav ---- */
+  nav.toc {
+    position: sticky; top: 0; z-index: 50;
+    backdrop-filter: blur(10px);
+    background: rgba(11,16,32,.82);
+    border-bottom: 1px solid var(--line);
+  }
+  nav.toc ul { display:flex; gap:4px; list-style:none; margin:0 auto; padding:8px 16px; max-width:1180px; overflow-x:auto; }
+  nav.toc a {
+    white-space:nowrap; text-decoration:none; color:var(--muted);
+    font-size:.86rem; padding:8px 13px; border-radius:8px; transition:.15s;
+  }
+  nav.toc a:hover { color:var(--txt); background:var(--panel); }
+  nav.toc a.active { color:var(--txt); background:var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 10px 28px 80px; }
+  section { padding: 46px 0 14px; border-top: 1px solid transparent; scroll-margin-top: 64px; }
+  section > h2 {
+    font-size: clamp(1.5rem, 3vw, 2.1rem); margin:0 0 6px; letter-spacing:-.01em;
+    display:flex; align-items:center; gap:12px;
+  }
+  section > h2 .num {
+    font-family:var(--mono); font-size:.95rem; color:var(--accent);
+    border:1px solid var(--line); border-radius:8px; padding:3px 10px; background:var(--panel);
+  }
+  .section-sub { color:var(--muted); margin:0 0 24px; max-width:820px; }
+
+  .card {
+    background: linear-gradient(180deg, var(--panel), var(--bg-2));
+    border:1px solid var(--line); border-radius:var(--radius);
+    padding:22px 24px; box-shadow:var(--shadow);
+  }
+  .grid { display:grid; gap:18px; }
+  .g2 { grid-template-columns: repeat(2, 1fr); }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 860px){ .g2,.g3 { grid-template-columns:1fr; } }
+
+  h3 { margin:0 0 8px; font-size:1.12rem; }
+  h4 { margin:18px 0 6px; font-size:1rem; color:var(--accent); }
+  p { margin:8px 0; }
+  ul.tight { margin:8px 0; padding-left:20px; }
+  ul.tight li { margin:4px 0; }
+  code { font-family:var(--mono); font-size:.86em; background:rgba(124,92,255,.12); padding:2px 6px; border-radius:6px; color:#d9d2ff; }
+  .pill {
+    display:inline-block; font-size:.72rem; padding:3px 9px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); margin:2px 4px 2px 0;
+  }
+  .pill.cyan{ color:var(--accent); border-color:rgba(76,194,255,.4); background:rgba(76,194,255,.07);}
+  .pill.violet{ color:#bdacff; border-color:rgba(124,92,255,.4); background:rgba(124,92,255,.08);}
+  .pill.green{ color:var(--accent-3); border-color:rgba(54,211,153,.4); background:rgba(54,211,153,.07);}
+  .pill.amber{ color:var(--accent-4); border-color:rgba(255,180,84,.4); background:rgba(255,180,84,.07);}
+  .pill.red{ color:var(--accent-5); border-color:rgba(255,107,129,.4); background:rgba(255,107,129,.07);}
+
+  .callout {
+    border-left:3px solid var(--accent); background:rgba(76,194,255,.06);
+    padding:12px 16px; border-radius:0 10px 10px 0; margin:14px 0;
+  }
+  .callout.sec { border-left-color: var(--accent-3); background:rgba(54,211,153,.06); }
+  .callout.warn { border-left-color: var(--accent-4); background:rgba(255,180,84,.06); }
+  .callout strong { color:var(--txt); }
+
+  /* ---- Tabs ---- */
+  .tabs { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 16px; }
+  .tab-btn {
+    cursor:pointer; border:1px solid var(--line); background:var(--panel);
+    color:var(--muted); padding:9px 15px; border-radius:10px; font-size:.88rem; transition:.15s;
+  }
+  .tab-btn:hover { color:var(--txt); }
+  .tab-btn.active { color:var(--txt); border-color:var(--accent); background:var(--panel-2); box-shadow:0 0 0 1px rgba(76,194,255,.3); }
+  .tab-panel { display:none; animation: fade .25s ease; }
+  .tab-panel.active { display:block; }
+  @keyframes fade { from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
+
+  /* ---- Accordion ---- */
+  .acc { border:1px solid var(--line); border-radius:12px; overflow:hidden; margin:10px 0; background:var(--panel); }
+  .acc summary {
+    cursor:pointer; padding:14px 18px; font-weight:600; list-style:none;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+  }
+  .acc summary::-webkit-details-marker { display:none; }
+  .acc summary .chev { transition:.2s; color:var(--accent); }
+  .acc[open] summary .chev { transform:rotate(90deg); }
+  .acc .acc-body { padding:0 18px 16px; color:var(--muted); }
+  .acc .acc-body p, .acc .acc-body li { color:var(--muted); }
+
+  /* ---- Tables ---- */
+  table { width:100%; border-collapse:collapse; margin:12px 0; font-size:.9rem; }
+  th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--accent); font-weight:600; background:rgba(76,194,255,.04); }
+  tr:hover td { background:rgba(255,255,255,.02); }
+
+  /* ---- Interactive SVG diagram ---- */
+  .diagram-wrap { display:grid; grid-template-columns: 1.45fr .85fr; gap:18px; align-items:start; }
+  @media (max-width: 980px){ .diagram-wrap { grid-template-columns:1fr; } }
+  .svg-stage { background:radial-gradient(700px 400px at 50% 0, rgba(76,194,255,.07), transparent), var(--bg-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px; }
+  .node { cursor:pointer; transition:.18s; }
+  .node rect, .node circle { transition:.18s; }
+  .node:hover rect, .node.sel rect { stroke:var(--accent); stroke-width:2.2; filter:drop-shadow(0 0 8px rgba(76,194,255,.5)); }
+  .node text { pointer-events:none; }
+  .flow { stroke-dasharray:6 6; animation: dash 1.2s linear infinite; }
+  @keyframes dash { to { stroke-dashoffset:-24; } }
+  .info-panel { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:18px 20px; min-height:280px; }
+  .info-panel h3 { color:var(--accent); }
+  .info-panel .ph { color:var(--muted); }
+  .legend { display:flex; flex-wrap:wrap; gap:14px; margin-top:12px; font-size:.8rem; color:var(--muted); }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .swatch { width:13px; height:13px; border-radius:4px; display:inline-block; }
+
+  /* ---- WAF pillar selector ---- */
+  .pillar-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
+  @media (max-width:860px){ .pillar-grid { grid-template-columns:repeat(2,1fr);} }
+  .pillar {
+    cursor:pointer; text-align:center; padding:16px 10px; border-radius:12px;
+    border:1px solid var(--line); background:var(--panel); transition:.15s;
+  }
+  .pillar:hover { transform:translateY(-2px); }
+  .pillar.active { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent), var(--shadow); background:var(--panel-2); }
+  .pillar .ico { font-size:1.6rem; }
+  .pillar .nm { font-size:.82rem; margin-top:6px; }
+  .pillar-detail { margin-top:16px; }
+
+  /* ---- Footprint ladder ---- */
+  .ladder { display:flex; flex-direction:column; gap:0; }
+  .rung { display:grid; grid-template-columns: 160px 1fr; gap:18px; padding:16px 0; border-bottom:1px dashed var(--line); align-items:start; }
+  @media (max-width:680px){ .rung { grid-template-columns:1fr; gap:6px; } }
+  .rung .layer { font-weight:700; color:var(--accent); }
+  .rung .layer small { display:block; color:var(--muted); font-weight:400; font-size:.8rem; }
+
+  footer { border-top:1px solid var(--line); margin-top:40px; padding:28px; text-align:center; color:var(--muted); font-size:.85rem; }
+  .kbd { font-family:var(--mono); border:1px solid var(--line); border-bottom-width:2px; border-radius:6px; padding:1px 7px; font-size:.8em; background:var(--panel); }
+  .toggle-note { font-size:.8rem; color:var(--muted); margin-top:8px; }
+  .scroll-top { position:fixed; right:22px; bottom:22px; z-index:60; border:1px solid var(--line); background:var(--panel); color:var(--txt); border-radius:12px; padding:10px 14px; cursor:pointer; opacity:0; pointer-events:none; transition:.2s; }
+  .scroll-top.show { opacity:1; pointer-events:auto; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <span class="eyebrow">◆ Cloud Ops Field Guide</span>
+  <h1>Azure AI Foundry<br /><span class="grad">Architecture &amp; Footprint Deep Dive</span></h1>
+  <p class="lede">How Microsoft's AI estate extends from SaaS Copilots down into a governed PaaS build surface — and how to land it inside an enterprise-scale Azure Landing Zone without violating a single Well-Architected pillar.</p>
+  <div class="assume">
+    <span>Audience: Entra ID fluent</span>
+    <span>AZ-500 level</span>
+    <span>CISSP level</span>
+    <span>Assumes hub-spoke / ALZ familiarity</span>
+    <span>Self-contained · works offline</span>
+  </div>
+</header>
+
+<nav class="toc" id="toc">
+  <ul>
+    <li><a href="#footprint">1 · AI Footprint</a></li>
+    <li><a href="#whatis">2 · What Foundry Is</a></li>
+    <li><a href="#architecture">3 · Architecture</a></li>
+    <li><a href="#identity">4 · Identity &amp; Entra</a></li>
+    <li><a href="#network">5 · Network &amp; WAF</a></li>
+    <li><a href="#landingzone">6 · Landing Zones</a></li>
+    <li><a href="#wellarch">7 · Well-Architected</a></li>
+    <li><a href="#agents">8 · Agent Service</a></li>
+    <li><a href="#governance">9 · Governance</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<!-- ============ 1. FOOTPRINT ============ -->
+<section id="footprint">
+  <h2><span class="num">01</span> The Microsoft AI Footprint — and where Foundry sits</h2>
+  <p class="section-sub">Microsoft's AI is not one product; it's a stack. The SaaS Copilots you can't reshape sit on top, the managed model APIs in the middle, and the raw silicon and safety systems at the bottom. <strong>Azure AI Foundry is the layer where Microsoft hands you the controls</strong> — the same models powering M365 Copilot become building blocks you compose, ground, secure, and ship.</p>
+
+  <div class="card">
+    <div class="ladder">
+      <div class="rung">
+        <div class="layer">SaaS Copilots<small>Consume only</small></div>
+        <div>
+          <p style="margin-top:0">M365 Copilot, GitHub Copilot, Security Copilot, Copilot in Edge/Windows. You configure and govern (DLP, Entra, Purview) but do <em>not</em> own the model, prompt, or grounding pipeline. Closest the average enterprise gets to "AI as a feature."</p>
+          <span class="pill cyan">Entra-gated</span><span class="pill cyan">Purview-governed</span><span class="pill">No model control</span>
+        </div>
+      </div>
+      <div class="rung">
+        <div class="layer">Low-code agents<small>Shape behavior</small></div>
+        <div>
+          <p style="margin-top:0"><strong>Copilot Studio</strong> — declarative agents, topics, connectors, and orchestration over Microsoft Graph. You control grounding sources and actions; Microsoft still owns the runtime and model selection envelope.</p>
+          <span class="pill violet">Graph grounding</span><span class="pill violet">Power Platform DLP</span>
+        </div>
+      </div>
+      <div class="rung">
+        <div class="layer">★ Azure AI Foundry<small>Build &amp; own</small></div>
+        <div>
+          <p style="margin-top:0"><strong>The pro-code / PaaS surface.</strong> Pick from 1,900+ models in the catalog, deploy as serverless (MaaS) or managed compute, ground on your own data via Azure AI Search, build deterministic+agentic flows, evaluate, red-team, and expose endpoints into your own apps. You own the network, identity, keys, content-safety policy, and observability.</p>
+          <span class="pill green">Your VNet</span><span class="pill green">Your managed identity</span><span class="pill green">Your CMK</span><span class="pill green">Your eval gates</span>
+        </div>
+      </div>
+      <div class="rung">
+        <div class="layer">Platform primitives<small>Underpin everything</small></div>
+        <div>
+          <p style="margin-top:0"><strong>Azure OpenAI</strong> (now a deployment inside Foundry), Azure AI Services (Vision, Speech, Language, Document Intelligence, Content Safety), Azure Machine Learning, Azure AI Search. These are the cognitive APIs every higher layer ultimately calls.</p>
+          <span class="pill">Cognitive Services RP</span><span class="pill">Azure ML</span><span class="pill">Content Safety</span>
+        </div>
+      </div>
+      <div class="rung">
+        <div class="layer">Substrate<small>Microsoft-operated</small></div>
+        <div>
+          <p style="margin-top:0">Frontier &amp; small models (OpenAI GPT family, Microsoft Phi, Mistral, Llama, Cohere, Nvidia NIM), GPU/AI accelerator fleet, the Responsible AI safety stack, and Azure region/datacenter fabric. You consume; Microsoft operates and patches.</p>
+          <span class="pill amber">Shared responsibility shifts up</span>
+        </div>
+      </div>
+    </div>
+    <div class="callout sec">
+      <strong>CISSP lens — shared responsibility drifts per layer.</strong> Moving down the ladder, you inherit more control <em>and</em> more accountability. A SaaS Copilot is a vendor-risk + data-governance problem; a Foundry deployment is a full secure-SDLC problem (identity, network, key management, model supply chain, prompt-injection threat modeling, logging, and incident response are now <em>yours</em>).
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2. WHAT FOUNDRY IS ============ -->
+<section id="whatis">
+  <h2><span class="num">02</span> What Azure AI Foundry actually is</h2>
+  <p class="section-sub">Foundry (GA-rebranded from <em>Azure AI Studio</em> at Ignite 2024) is a unified application platform — a portal (<code>ai.azure.com</code>), an SDK, and a set of first-class Azure resources for building, evaluating, deploying, and operating generative-AI apps and agents.</p>
+
+  <div class="tabs" role="tablist">
+    <div class="tab-btn active" data-tab="t-resources">Resource model</div>
+    <div class="tab-btn" data-tab="t-catalog">Model catalog</div>
+    <div class="tab-btn" data-tab="t-deploy">Deployment modes</div>
+    <div class="tab-btn" data-tab="t-lifecycle">Build lifecycle</div>
+    <div class="tab-btn" data-tab="t-naming">Lineage &amp; naming</div>
+  </div>
+
+  <div class="tab-panel active" id="t-resources">
+    <div class="card">
+      <h3>Two ways to provision — know which one you have</h3>
+      <div class="grid g2">
+        <div>
+          <h4>Hub-based projects (AML lineage)</h4>
+          <p>The original model: an <strong>AI Foundry hub</strong> (a kind of Azure Machine Learning workspace) that provisions a set of dependency resources and parents one or more <strong>projects</strong>. The hub centralizes networking, connections, compute, and security so projects inherit them.</p>
+          <ul class="tight">
+            <li>Hub auto-creates: <code>Storage</code>, <code>Key Vault</code>, <code>Container Registry</code> (optional), <code>Application Insights</code> (optional), and an <code>Azure AI Services</code>/AOAI resource.</li>
+            <li>Best when teams share network + connections and you want AML features (managed compute, prompt flow runtimes).</li>
+          </ul>
+        </div>
+        <div>
+          <h4>Foundry projects (new resource)</h4>
+          <p>The newer <strong>Azure AI Foundry resource</strong> (<code>Microsoft.CognitiveServices/accounts</code>, kind <code>AIServices</code>) hosts <strong>Foundry projects</strong> as a first-class, lighter-weight object — the default for the Agent Service and the unified Foundry API.</p>
+          <ul class="tight">
+            <li>Fewer mandatory dependencies; agent threads/state can be Microsoft-managed or BYO (your Cosmos DB, Storage, AI Search).</li>
+            <li>Best for agent-centric and "just give me an endpoint" scenarios.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="callout warn"><strong>Ops gotcha:</strong> the two project types differ in RBAC surface, networking story, and which SDK/API endpoint you call. Standardize on one per platform team and encode the choice in your landing-zone bicep/Terraform module so app teams can't drift.</div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="t-catalog">
+    <div class="card">
+      <h3>The model catalog — one estate, many providers</h3>
+      <p>A single governed catalog of <strong>1,900+ models</strong> spanning Azure OpenAI (GPT-4o/4.1, o-series, GPT-image), Microsoft Phi, Meta Llama, Mistral, Cohere, Nvidia NIM, Stability, and the curated Hugging Face collection.</p>
+      <table>
+        <tr><th>Provider class</th><th>Billing / hosting</th><th>Control plane note</th></tr>
+        <tr><td>Azure OpenAI models</td><td>Sold directly by Microsoft; PTU or pay-as-you-go</td><td>Data stays in your AOAI deployment; no prompt/response used to train base models</td></tr>
+        <tr><td>Models-as-a-Service (Mistral, Cohere, Llama, etc.)</td><td>Serverless API, pay per token; some via Marketplace offer</td><td>Inference in a Microsoft-managed endpoint; check per-model data-handling terms</td></tr>
+        <tr><td>Open / HF models</td><td>Managed Compute — you pay for the VM/GPU</td><td>Runs in <em>your</em> deployment; full network isolation possible</td></tr>
+        <tr><td>Microsoft Phi (SLMs)</td><td>MaaS or Managed Compute, or edge</td><td>Small-language models for cost/latency-sensitive or on-device cases</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="t-deploy">
+    <div class="card">
+      <h3>How a model becomes an endpoint</h3>
+      <div class="grid g3">
+        <div class="acc-like card" style="box-shadow:none">
+          <h4>Serverless API (MaaS)</h4>
+          <p>Pay-per-token REST endpoint. No infra to manage, fastest to ship, but inference runs in a Microsoft-managed pool. Lock down with key rotation + private endpoint where supported.</p>
+        </div>
+        <div class="card" style="box-shadow:none">
+          <h4>Managed Compute</h4>
+          <p>Model runs on dedicated GPU VMs <em>in your deployment</em>. Full VNet isolation, autoscale, you own patching cadence of the inference container image. Highest control + cost.</p>
+        </div>
+        <div class="card" style="box-shadow:none">
+          <h4>Azure OpenAI deployment</h4>
+          <p>Provisioned-Throughput Units (PTU) for predictable latency/SLA, or standard pay-go. The workhorse for Copilot-grade workloads with data-residency commitments.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="t-lifecycle">
+    <div class="card">
+      <h3>The Foundry build lifecycle</h3>
+      <ol class="tight">
+        <li><strong>Explore</strong> — model catalog, benchmarks, model leaderboard, try in playground.</li>
+        <li><strong>Ground</strong> — connect data (Azure AI Search vector index, your storage, Fabric, Bing) → RAG.</li>
+        <li><strong>Build</strong> — prompt flow / Agent Service / SDK; add tools (function calling, code interpreter, OpenAPI, Logic Apps).</li>
+        <li><strong>Evaluate</strong> — built-in evaluators (groundedness, relevance, fluency, safety) + your own datasets; AI red-teaming agent (PyRIT-based).</li>
+        <li><strong>Deploy</strong> — choose deployment mode, wire content safety, set rate limits.</li>
+        <li><strong>Observe</strong> — tracing, Application Insights, online evaluation, drift &amp; abuse monitoring.</li>
+      </ol>
+      <div class="callout sec"><strong>Secure-SDLC mapping:</strong> Evaluate + red-team = your pre-prod security gate; Observe = detection &amp; response. Treat eval thresholds as release-blocking quality gates in CI/CD.</div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="t-naming">
+    <div class="card">
+      <h3>Lineage &amp; naming — decode the rebrands</h3>
+      <table>
+        <tr><th>You hear…</th><th>It means</th></tr>
+        <tr><td>Azure AI Studio</td><td>Former name of Azure AI Foundry (the portal/platform)</td></tr>
+        <tr><td>Azure OpenAI Studio / Service</td><td>The AOAI capability — now surfaced inside Foundry</td></tr>
+        <tr><td>Azure AI Agent Service</td><td>Now <strong>Azure AI Foundry Agent Service</strong> (GA)</td></tr>
+        <tr><td>Azure AI Services (multi-service)</td><td>The Cognitive Services account that often backs a hub</td></tr>
+        <tr><td>Cognitive Services RP</td><td><code>Microsoft.CognitiveServices</code> — the resource provider Foundry/AOAI live under</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 3. ARCHITECTURE (interactive SVG) ============ -->
+<section id="architecture">
+  <h2><span class="num">03</span> Reference architecture — click the diagram</h2>
+  <p class="section-sub">A baseline secure Foundry workload, hub-spoke aware. Click any node to inspect its role, the data flow it participates in, and the controls you should attach. Animated dashes show the primary inference + grounding path.</p>
+
+  <div class="diagram-wrap">
+    <div class="svg-stage">
+      <svg viewBox="0 0 720 560" width="100%" role="img" aria-label="Azure AI Foundry reference architecture diagram">
+        <defs>
+          <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#4cc2ff"/>
+          </marker>
+        </defs>
+
+        <!-- zones -->
+        <rect x="14" y="14" width="692" height="92" rx="12" fill="rgba(124,92,255,.06)" stroke="#2a3556"/>
+        <text x="28" y="36" fill="#bdacff" font-size="12" font-family="monospace">EDGE / CLIENT  ·  identity perimeter</text>
+
+        <rect x="14" y="120" width="692" height="120" rx="12" fill="rgba(76,194,255,.05)" stroke="#2a3556"/>
+        <text x="28" y="142" fill="#4cc2ff" font-size="12" font-family="monospace">HUB VNET  ·  ingress + shared services</text>
+
+        <rect x="14" y="254" width="692" height="290" rx="12" fill="rgba(54,211,153,.05)" stroke="#2a3556"/>
+        <text x="28" y="276" fill="#36d399" font-size="12" font-family="monospace">SPOKE VNET  ·  AI application landing zone (private)</text>
+
+        <!-- EDGE -->
+        <g class="node" data-key="user">
+          <rect x="40" y="46" width="150" height="44" rx="9" fill="#1b2542" stroke="#3a4670"/>
+          <text x="115" y="73" fill="#e7ecf6" font-size="13" text-anchor="middle">User / App + Entra</text>
+        </g>
+        <g class="node" data-key="frontdoor">
+          <rect x="300" y="46" width="170" height="44" rx="9" fill="#1b2542" stroke="#3a4670"/>
+          <text x="385" y="67" fill="#e7ecf6" font-size="12.5" text-anchor="middle">Front Door + WAF</text>
+          <text x="385" y="82" fill="#9aa6c4" font-size="10" text-anchor="middle">OWASP / bot rules</text>
+        </g>
+
+        <!-- HUB -->
+        <g class="node" data-key="apim">
+          <rect x="120" y="152" width="180" height="56" rx="9" fill="#152e2a" stroke="#2f6b58"/>
+          <text x="210" y="176" fill="#e7ecf6" font-size="12.5" text-anchor="middle">APIM — GenAI Gateway</text>
+          <text x="210" y="192" fill="#9aa6c4" font-size="10" text-anchor="middle">token limit · LB · caching</text>
+        </g>
+        <g class="node" data-key="firewall">
+          <rect x="340" y="152" width="150" height="56" rx="9" fill="#152e2a" stroke="#2f6b58"/>
+          <text x="415" y="176" fill="#e7ecf6" font-size="12.5" text-anchor="middle">Azure Firewall</text>
+          <text x="415" y="192" fill="#9aa6c4" font-size="10" text-anchor="middle">egress FQDN filter</text>
+        </g>
+        <g class="node" data-key="dns">
+          <rect x="520" y="152" width="160" height="56" rx="9" fill="#152e2a" stroke="#2f6b58"/>
+          <text x="600" y="176" fill="#e7ecf6" font-size="12.5" text-anchor="middle">Private DNS Zones</text>
+          <text x="600" y="192" fill="#9aa6c4" font-size="10" text-anchor="middle">privatelink.*</text>
+        </g>
+
+        <!-- SPOKE -->
+        <g class="node" data-key="foundry">
+          <rect x="60" y="300" width="200" height="62" rx="10" fill="#1b2542" stroke="#4cc2ff"/>
+          <text x="160" y="326" fill="#e7ecf6" font-size="13" text-anchor="middle" font-weight="bold">AI Foundry Hub/Project</text>
+          <text x="160" y="344" fill="#9aa6c4" font-size="10" text-anchor="middle">managed VNet · PE ingress</text>
+        </g>
+        <g class="node" data-key="aoai">
+          <rect x="300" y="300" width="170" height="62" rx="10" fill="#1b2542" stroke="#3a4670"/>
+          <text x="385" y="326" fill="#e7ecf6" font-size="12.5" text-anchor="middle">Model deployment</text>
+          <text x="385" y="344" fill="#9aa6c4" font-size="10" text-anchor="middle">AOAI / MaaS / compute</text>
+        </g>
+        <g class="node" data-key="search">
+          <rect x="510" y="300" width="170" height="62" rx="10" fill="#1b2542" stroke="#3a4670"/>
+          <text x="595" y="326" fill="#e7ecf6" font-size="12.5" text-anchor="middle">Azure AI Search</text>
+          <text x="595" y="344" fill="#9aa6c4" font-size="10" text-anchor="middle">vector index (RAG)</text>
+        </g>
+
+        <g class="node" data-key="contentsafety">
+          <rect x="60" y="400" width="200" height="56" rx="10" fill="#2a1f2e" stroke="#7a3a52"/>
+          <text x="160" y="424" fill="#e7ecf6" font-size="12.5" text-anchor="middle">Content Safety</text>
+          <text x="160" y="440" fill="#9aa6c4" font-size="10" text-anchor="middle">filters · prompt shields</text>
+        </g>
+        <g class="node" data-key="data">
+          <rect x="300" y="400" width="170" height="56" rx="10" fill="#1b2542" stroke="#3a4670"/>
+          <text x="385" y="424" fill="#e7ecf6" font-size="12.5" text-anchor="middle">Storage · KV · Cosmos</text>
+          <text x="385" y="440" fill="#9aa6c4" font-size="10" text-anchor="middle">CMK · agent state</text>
+        </g>
+        <g class="node" data-key="monitor">
+          <rect x="510" y="400" width="170" height="56" rx="10" fill="#1b2542" stroke="#3a4670"/>
+          <text x="595" y="424" fill="#e7ecf6" font-size="12.5" text-anchor="middle">Monitor · App Insights</text>
+          <text x="595" y="440" fill="#9aa6c4" font-size="10" text-anchor="middle">tracing · Defender</text>
+        </g>
+        <g class="node" data-key="mi">
+          <rect x="60" y="486" width="620" height="44" rx="10" fill="rgba(124,92,255,.08)" stroke="#7c5cff"/>
+          <text x="370" y="513" fill="#bdacff" font-size="12.5" text-anchor="middle" font-weight="bold">Managed Identity + Entra RBAC + Key Vault  ·  the identity fabric under every arrow</text>
+        </g>
+
+        <!-- flows -->
+        <line class="flow" x1="190" y1="68" x2="298" y2="68" stroke="#4cc2ff" stroke-width="2" marker-end="url(#arrow)"/>
+        <line class="flow" x1="385" y1="90" x2="240" y2="150" stroke="#4cc2ff" stroke-width="2" marker-end="url(#arrow)"/>
+        <line class="flow" x1="210" y1="208" x2="180" y2="298" stroke="#4cc2ff" stroke-width="2" marker-end="url(#arrow)"/>
+        <line class="flow" x1="260" y1="330" x2="298" y2="330" stroke="#4cc2ff" stroke-width="2" marker-end="url(#arrow)"/>
+        <line class="flow" x1="470" y1="330" x2="508" y2="330" stroke="#4cc2ff" stroke-width="2" marker-end="url(#arrow)"/>
+        <line x1="160" y1="362" x2="160" y2="398" stroke="#7a3a52" stroke-width="1.6" marker-end="url(#arrow)"/>
+        <line x1="415" y1="208" x2="415" y2="298" stroke="#2f6b58" stroke-width="1.4" stroke-dasharray="3 4"/>
+      </svg>
+      <div class="legend">
+        <span><i class="swatch" style="background:rgba(124,92,255,.5)"></i>Identity perimeter</span>
+        <span><i class="swatch" style="background:rgba(76,194,255,.5)"></i>Hub / ingress</span>
+        <span><i class="swatch" style="background:rgba(54,211,153,.5)"></i>Spoke / app LZ</span>
+        <span><i class="swatch" style="background:#4cc2ff"></i>Animated = primary path</span>
+      </div>
+    </div>
+
+    <div class="info-panel" id="infoPanel">
+      <h3>Inspect a component</h3>
+      <p class="ph">Click any box in the diagram. Details on its role, the data it touches, and the controls you should attach will appear here.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4. IDENTITY ============ -->
+<section id="identity">
+  <h2><span class="num">04</span> Identity &amp; Entra ID integration</h2>
+  <p class="section-sub">Foundry runs on the Cognitive Services / AML resource providers, so it inherits the full Entra ID + Azure RBAC machinery. The design goal: <strong>zero standing secrets</strong> — managed identities and RBAC data-plane roles instead of API keys.</p>
+
+  <div class="grid g2">
+    <div class="card">
+      <h3>The auth chain</h3>
+      <ul class="tight">
+        <li><strong>User → portal/app:</strong> Entra interactive sign-in; enforce Conditional Access (device compliance, MFA, sign-in risk) on the app registration.</li>
+        <li><strong>App → Foundry endpoint:</strong> prefer Entra token (<code>DefaultAzureCredential</code>) over keys. Disable local/key auth where policy allows (<code>disableLocalAuth</code>).</li>
+        <li><strong>Foundry → dependencies:</strong> the workspace/account <strong>system- or user-assigned managed identity</strong> authenticates to Storage, Key Vault, AI Search, Cosmos — granted via RBAC, never connection strings.</li>
+        <li><strong>Agent → tool/API:</strong> On-Behalf-Of (OBO) where the agent must act as the user; otherwise the agent's own identity with least-privilege scope.</li>
+      </ul>
+      <div class="callout sec"><strong>Prompt-injection caveat:</strong> if an agent holds a powerful identity and ingests untrusted content, prompt injection becomes privilege escalation. Scope the agent's identity to exactly the tools it needs and gate high-impact actions behind human approval or a separate trust boundary.</div>
+    </div>
+    <div class="card">
+      <h3>Key built-in RBAC roles</h3>
+      <table>
+        <tr><th>Role</th><th>Grants</th></tr>
+        <tr><td><strong>Azure AI Account Owner</strong></td><td>Full Foundry account management</td></tr>
+        <tr><td><strong>Azure AI Project Manager</strong></td><td>Manage projects + assign users into projects</td></tr>
+        <tr><td><strong>Azure AI Developer</strong></td><td>Build/deploy within a project; no RBAC mgmt</td></tr>
+        <tr><td><strong>Azure AI User</strong></td><td>Read + consume project endpoints</td></tr>
+        <tr><td><strong>Cognitive Services OpenAI User/Contributor</strong></td><td>Data-plane inference / deployment mgmt on AOAI</td></tr>
+        <tr><td><strong>Search Index Data Reader</strong></td><td>Foundry MI reads the RAG index</td></tr>
+      </table>
+      <p class="toggle-note">Separate <em>control-plane</em> (manage the resource) from <em>data-plane</em> (call the model) grants. App identities almost never need control-plane roles.</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px">
+    <h3>Least-privilege patterns that survive an audit</h3>
+    <div class="grid g3">
+      <div><h4>PIM for control plane</h4><p>Owner/Contributor on Foundry resources is eligible-only via Privileged Identity Management, activated with justification + approval.</p></div>
+      <div><h4>Per-project boundaries</h4><p>One project = one trust boundary. Map projects to app teams; RBAC at the project scope, not the subscription.</p></div>
+      <div><h4>No keys in code</h4><p>Workload identity federation for CI/CD; managed identity at runtime. Key Vault references for any unavoidable secret, with rotation.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 5. NETWORK & WAF ============ -->
+<section id="network">
+  <h2><span class="num">05</span> Network architecture — and both meanings of "WAF"</h2>
+  <p class="section-sub">In a landing-zone conversation "WAF" is overloaded. This section disambiguates: the <strong>Web Application Firewall</strong> that protects your exposed inference endpoints (here), and the <strong>Well-Architected Framework</strong> design pillars (§7). Both matter; they are not the same thing.</p>
+
+  <div class="grid g2">
+    <div class="card">
+      <h3>Network isolation model</h3>
+      <ul class="tight">
+        <li><strong>Managed VNet:</strong> the Foundry hub provisions a Microsoft-managed VNet for its compute. Three modes: <code>public</code>, <code>private w/ internet outbound</code>, <code>private w/ approved outbound only</code> (FQDN allowlist).</li>
+        <li><strong>Private Endpoints:</strong> ingress to the hub/project, AOAI, AI Search, Storage, Key Vault, Cosmos — all via <code>privatelink</code> PEs in the spoke. Public network access set to <em>Disabled</em>.</li>
+        <li><strong>Private DNS:</strong> link the <code>privatelink.openai.azure.com</code>, <code>privatelink.cognitiveservices.azure.com</code>, <code>privatelink.api.azureml.ms</code>, <code>privatelink.search.windows.net</code>, etc. zones to the hub (centralized DNS).</li>
+        <li><strong>Egress control:</strong> Azure Firewall (or the managed VNet's approved-outbound list) constrains what the workload can reach — critical because models/agents can be coerced into outbound calls.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>The WAF (Web Application Firewall) tier</h3>
+      <p>When you expose a chat/agent endpoint to users or partner apps, never publish the model endpoint directly. Front it:</p>
+      <ul class="tight">
+        <li><strong>Azure Front Door + WAF</strong> (global, anycast, TLS offload, OWASP CRS + bot manager) for internet-facing apps, or <strong>App Gateway + WAF</strong> (regional, in-VNet) for internal/regulated.</li>
+        <li><strong>Azure API Management as a GenAI Gateway</strong> behind the WAF: token-based rate limiting (TPM/RPM), load-balancing &amp; failover across multiple AOAI/PTU deployments, semantic caching, request/response logging, and emitting token-usage metrics for chargeback.</li>
+        <li><strong>Defense-in-depth chain:</strong> <code>Front Door+WAF → APIM → Private Endpoint → Foundry → Content Safety → model</code>.</li>
+      </ul>
+      <div class="callout warn"><strong>WAF rules ≠ prompt firewall.</strong> An OWASP WAF stops SQLi/XSS at the HTTP layer; it does <em>not</em> understand prompt injection. Pair it with Azure AI Content Safety <em>Prompt Shields</em> and groundedness checks for the LLM-specific threats.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 6. LANDING ZONES ============ -->
+<section id="landingzone">
+  <h2><span class="num">06</span> Landing into the Azure Landing Zone</h2>
+  <p class="section-sub">A Foundry workload is an <strong>application landing zone</strong> — a subscription (or pair) vended from your management-group hierarchy, peered to the platform's connectivity hub, governed by inherited policy. Here's the mapping.</p>
+
+  <details class="acc" open>
+    <summary>Management group &amp; subscription placement <span class="chev">▶</span></summary>
+    <div class="acc-body">
+      <p>Place AI app subscriptions under the <code>Landing Zones → Corp</code> (or <code>Online</code> if internet-facing) management group so they inherit the corp policy baseline. Use <strong>subscription vending</strong> to provision them with networking, identity, and policy pre-wired. Keep platform resources (firewall, DNS, ExpressRoute/VPN) in the <code>Platform → Connectivity</code> subscription — Foundry spokes consume, never host, them.</p>
+    </div>
+  </details>
+
+  <details class="acc">
+    <summary>Connectivity topology <span class="chev">▶</span></summary>
+    <div class="acc-body">
+      <p>Hub-spoke or Virtual WAN. The Foundry spoke holds private endpoints; the hub holds Azure Firewall, the WAF tier, and the centralized <strong>Private DNS zones</strong>. Crucial detail: AI private-link FQDNs must resolve through the central DNS — a missing or unlinked <code>privatelink.openai.azure.com</code> zone is the single most common "it works in portal, fails from the app" outage.</p>
+    </div>
+  </details>
+
+  <details class="acc">
+    <summary>Governance via Azure Policy <span class="chev">▶</span></summary>
+    <div class="acc-body">
+      <ul class="tight">
+        <li><code>Deny</code> public network access on Cognitive Services / AML / Search / Storage.</li>
+        <li><code>Deny</code> or <code>Audit</code> account creation outside approved regions (data-residency / sovereignty).</li>
+        <li><code>DeployIfNotExists</code> diagnostic settings → central Log Analytics.</li>
+        <li><code>Audit</code> customer-managed keys (CMK) on all stateful dependencies.</li>
+        <li>Restrict <strong>allowed models / deployment SKUs</strong> to a vetted list to control cost and supply-chain risk.</li>
+      </ul>
+    </div>
+  </details>
+
+  <details class="acc">
+    <summary>Reference accelerators to start from <span class="chev">▶</span></summary>
+    <div class="acc-body">
+      <p>Don't hand-roll. Start from Microsoft's <strong>"Azure OpenAI / AI Foundry chat baseline"</strong> reference architecture, the <strong>GenAI Gateway</strong> APIM reference, and the <strong>ALZ Bicep / Terraform</strong> accelerators. Wrap Foundry provisioning in an IaC module your platform team owns, parameterized for network mode, CMK, and RBAC so app teams get a compliant project by default.</p>
+    </div>
+  </details>
+</section>
+
+<!-- ============ 7. WELL-ARCHITECTED ============ -->
+<section id="wellarch">
+  <h2><span class="num">07</span> Well-Architected Framework — Foundry edition</h2>
+  <p class="section-sub">The <em>other</em> WAF. Select a pillar to see the AI-specific design decisions Microsoft's WAF "AI workloads on Azure" guidance pushes you toward.</p>
+
+  <div class="pillar-grid" id="pillars">
+    <div class="pillar active" data-p="rel"><div class="ico">🛡️</div><div class="nm">Reliability</div></div>
+    <div class="pillar" data-p="sec"><div class="ico">🔐</div><div class="nm">Security</div></div>
+    <div class="pillar" data-p="cost"><div class="ico">💰</div><div class="nm">Cost</div></div>
+    <div class="pillar" data-p="ops"><div class="ico">⚙️</div><div class="nm">Operational Ex.</div></div>
+    <div class="pillar" data-p="perf"><div class="ico">⚡</div><div class="nm">Performance</div></div>
+  </div>
+
+  <div class="card pillar-detail" id="pillarDetail"></div>
+</section>
+
+<!-- ============ 8. AGENT SERVICE ============ -->
+<section id="agents">
+  <h2><span class="num">08</span> Foundry Agent Service</h2>
+  <p class="section-sub">The managed runtime for stateful, tool-using agents — the production path beyond a raw chat-completions call. It owns threads, runs, tool orchestration, and (optionally) your bring-your-own state and network.</p>
+
+  <div class="grid g2">
+    <div class="card">
+      <h3>What it gives you</h3>
+      <ul class="tight">
+        <li><strong>Threads &amp; runs</strong> — managed conversation state and execution loop (OpenAI Assistants-compatible surface).</li>
+        <li><strong>Tools</strong> — file search, code interpreter, function calling, OpenAPI 3.0 tools, Azure AI Search, Bing grounding, Logic Apps / Azure Functions actions.</li>
+        <li><strong>Connected / multi-agent</strong> — agents that call other agents; orchestration patterns for decomposition.</li>
+        <li><strong>BYO resources</strong> — your Cosmos DB (thread state), Storage (files), and AI Search (knowledge) inside your VNet, rather than Microsoft-managed defaults — the choice for regulated data.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Security posture for agents</h3>
+      <ul class="tight">
+        <li><strong>BYO VNet / private network</strong> injection so agent egress is your egress (Firewall-filtered).</li>
+        <li><strong>Least-privilege tool identity</strong> — each tool/connection gets only the RBAC it needs; OBO for user-context actions.</li>
+        <li><strong>Content Safety + Prompt Shields</strong> on inputs and tool outputs; treat tool-returned content as untrusted.</li>
+        <li><strong>Tracing</strong> every run to App Insights — agent decisions and tool calls are your audit trail and incident-response timeline.</li>
+      </ul>
+      <div class="callout"><strong>Threat-model the toolset, not just the model.</strong> The blast radius of an agent equals the union of its tools' permissions. A read-only data tool is low risk; a Logic App that can send mail or hit an internal API is a lateral-movement primitive if the agent is hijacked.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 9. GOVERNANCE ============ -->
+<section id="governance">
+  <h2><span class="num">09</span> Data governance, safety &amp; observability</h2>
+  <p class="section-sub">The controls that turn a working prototype into something legal, security, and your auditors will sign off on.</p>
+
+  <div class="grid g3">
+    <div class="card"><h3>Data handling</h3><ul class="tight">
+      <li>AOAI: prompts/responses <strong>not</strong> used to train base models; your data stays in your resource.</li>
+      <li>CMK on Storage / KV / Cosmos / Search for encryption-at-rest you control.</li>
+      <li>Data residency via region pinning + policy; check per-model MaaS terms separately.</li>
+      <li>Purview for cataloging &amp; DLP over grounding sources.</li>
+    </ul></div>
+    <div class="card"><h3>Responsible AI &amp; safety</h3><ul class="tight">
+      <li>Azure AI <strong>Content Safety</strong>: hate/violence/sexual/self-harm filters, severity tuning.</li>
+      <li><strong>Prompt Shields</strong> (jailbreak + indirect injection), protected-material detection, groundedness detection.</li>
+      <li>Built-in + custom <strong>evaluations</strong> and the <strong>AI red-teaming agent</strong> as release gates.</li>
+    </ul></div>
+    <div class="card"><h3>Observability &amp; defense</h3><ul class="tight">
+      <li>Tracing + Application Insights for token usage, latency, and run inspection.</li>
+      <li><strong>Microsoft Defender for Cloud — AI workload</strong> threat protection / posture.</li>
+      <li>Diagnostic logs → central Log Analytics → Sentinel analytics for abuse &amp; anomaly detection.</li>
+      <li>Online evaluation to catch drift and groundedness regressions in prod.</li>
+    </ul></div>
+  </div>
+
+  <div class="callout sec" style="margin-top:18px">
+    <strong>The one-paragraph takeaway.</strong> Azure AI Foundry is where Microsoft's AI stops being a feature you consume and becomes a platform you own. That ownership is the whole point — and the whole risk. Land it as a governed application landing zone, authenticate everything with managed identity + Entra RBAC, isolate it with private endpoints behind a real WAF, gate releases on evaluations and red-teaming, and observe it like any other production system. Do that, and the same models behind M365 Copilot become a build surface that satisfies all five Well-Architected pillars.
+  </div>
+</section>
+
+</main>
+
+<button class="scroll-top" id="scrollTop" aria-label="Back to top">↑ Top</button>
+
+<footer>
+  Azure AI Foundry Architecture Deep Dive · interactive field guide · self-contained HTML5.<br/>
+  Product names, model availability, and role definitions evolve quickly — verify specifics against current Microsoft Learn docs before a design review or production decision.
+</footer>
+
+<script>
+/* ---------- node details for the SVG ---------- */
+const NODES = {
+  user: { t:"User / App + Entra ID", b:"The identity perimeter. Interactive users sign in via Entra (enforce Conditional Access — MFA, device compliance, sign-in risk). Service callers use an app registration or managed identity. Nothing reaches the model without a valid Entra token or an explicitly-allowed key.", c:["Conditional Access","App registration","Token, not key"] },
+  frontdoor: { t:"Azure Front Door + WAF", b:"Global ingress for internet-facing apps: anycast routing, TLS termination, OWASP Core Rule Set, and bot management. This is the Web-Application-Firewall meaning of 'WAF'. For internal/regulated apps swap for App Gateway + WAF (regional, in-VNet).", c:["OWASP CRS","Bot manager","TLS offload","DDoS"] },
+  apim: { t:"APIM — GenAI Gateway", b:"The AI gateway pattern. Token-based rate limiting (TPM/RPM) to stop runaway spend, load-balancing + failover across multiple AOAI/PTU backends, semantic caching, and per-consumer token metering for chargeback. Centralizes policy so app teams don't each reinvent it.", c:["Token rate limit","Multi-backend LB","Semantic cache","Chargeback metrics"] },
+  firewall: { t:"Azure Firewall (egress)", b:"Constrains outbound traffic from the AI spoke to an FQDN allowlist. Critical for AI: models and agents can be coerced (prompt injection) into making outbound calls — egress filtering bounds the blast radius and supports data-exfiltration prevention.", c:["FQDN allowlist","Egress control","Exfil prevention"] },
+  dns: { t:"Private DNS Zones", b:"Centralized resolution for privatelink FQDNs (openai, cognitiveservices, api.azureml.ms, search.windows.net, blob, vault). Linked to the hub. A missing/unlinked zone is the #1 cause of 'works in portal, fails from app' — the name resolves to public IP and the PE is bypassed or blocked.", c:["privatelink.*","Central resolution","Common outage cause"] },
+  foundry: { t:"AI Foundry Hub / Project", b:"The control + orchestration plane. A hub (AML-lineage) or Foundry resource parents projects. Provisions a managed VNet for compute; ingress via private endpoint with public access disabled. A project is one trust boundary — map it to an app team and scope RBAC there.", c:["Managed VNet","PE ingress","Public access off","Project = boundary"] },
+  aoai: { t:"Model deployment", b:"Where a catalog model becomes a callable endpoint: Azure OpenAI (PTU for SLA/latency, or pay-go), serverless MaaS (Mistral/Cohere/Llama), or Managed Compute (open models on your GPUs, full isolation). Choice drives data-handling, cost, and network posture.", c:["AOAI / PTU","MaaS","Managed Compute"] },
+  search: { t:"Azure AI Search", b:"The retrieval tier for RAG: a vector + hybrid index over your grounding data. Foundry's managed identity reads it (Search Index Data Reader). Private endpoint, no public access, CMK. Keeping grounding fresh and access-scoped is core to answer quality and data security.", c:["Vector index","RAG","MI read-only","Private"] },
+  contentsafety: { t:"Azure AI Content Safety", b:"The LLM-layer firewall a WAF can't replace. Harm-category filters (hate/violence/sexual/self-harm) with tunable severity, Prompt Shields for jailbreak + indirect prompt-injection, protected-material and groundedness detection. Apply to both inputs and tool outputs.", c:["Prompt Shields","Harm filters","Groundedness"] },
+  data: { t:"Storage · Key Vault · Cosmos", b:"Stateful dependencies: Storage (files/datasets), Key Vault (secrets/keys), Cosmos DB (agent thread state in BYO mode). All with customer-managed keys, private endpoints, and RBAC-only access from the Foundry managed identity — no connection strings in code.", c:["CMK","Agent state","RBAC access","Private"] },
+  monitor: { t:"Monitor · App Insights · Defender", b:"Observability and defense. Tracing captures every agent run and tool call — your audit trail and IR timeline. Token/latency metrics, diagnostic logs to central Log Analytics → Sentinel. Microsoft Defender for Cloud adds AI-workload threat protection and posture management.", c:["Run tracing","Defender for AI","Sentinel analytics"] },
+  mi: { t:"Managed Identity + Entra RBAC + Key Vault", b:"The identity fabric beneath every arrow. The goal is zero standing secrets: system/user-assigned managed identities authenticate Foundry to its dependencies, granted via least-privilege RBAC data-plane roles. PIM for control-plane, workload identity federation for CI/CD.", c:["Zero standing secrets","Least privilege","PIM","Workload federation"] }
+};
+const panel = document.getElementById('infoPanel');
+document.querySelectorAll('.node').forEach(n=>{
+  n.addEventListener('click', ()=>{
+    document.querySelectorAll('.node').forEach(x=>x.classList.remove('sel'));
+    n.classList.add('sel');
+    const d = NODES[n.dataset.key];
+    if(!d) return;
+    panel.innerHTML = `<h3>${d.t}</h3><p>${d.b}</p><div>${d.c.map(x=>`<span class="pill cyan">${x}</span>`).join('')}</div>`;
+  });
+});
+
+/* ---------- tabs ---------- */
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const wrap = btn.closest('section');
+    wrap.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    wrap.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+  });
+});
+
+/* ---------- WAF pillars ---------- */
+const PILLARS = {
+  rel: { t:"Reliability", body:`<ul class="tight">
+    <li><strong>Multi-region / multi-deployment failover</strong> behind APIM — quota and capacity are per-region, so a single AOAI deployment is a single point of failure.</li>
+    <li><strong>Provisioned Throughput (PTU)</strong> for predictable capacity on critical paths; pay-go spillover for burst.</li>
+    <li><strong>Graceful degradation</strong>: fall back to a smaller model or cached/templated response on 429/throttle rather than hard-failing.</li>
+    <li>Design for <strong>quota limits as a reliability constraint</strong>, not just a cost one. Health-probe backends and retry with backoff.</li></ul>` },
+  sec: { t:"Security", body:`<ul class="tight">
+    <li><strong>Private by default</strong>: private endpoints, public network access disabled, managed VNet with approved-outbound only.</li>
+    <li><strong>Entra + managed identity</strong>, disable local/key auth, least-privilege data-plane RBAC, PIM for control plane.</li>
+    <li><strong>CMK</strong> on all stateful dependencies; secrets in Key Vault with rotation.</li>
+    <li><strong>LLM-specific threats</strong>: Prompt Shields, content filters, groundedness checks, and red-teaming as a release gate. Threat-model the agent toolset.</li></ul>` },
+  cost: { t:"Cost Optimization", body:`<ul class="tight">
+    <li><strong>Right-size the model</strong>: use SLMs (Phi) or mini models where they pass eval; reserve frontier models for tasks that need them.</li>
+    <li><strong>Token governance</strong> at the APIM gateway: rate limits, semantic caching, and per-consumer metering for chargeback/showback.</li>
+    <li><strong>PTU vs pay-go</strong> break-even analysis — PTU wins at sustained high volume, pay-go at spiky/low.</li>
+    <li>Prompt/context engineering to cut token count; cache embeddings; batch where latency allows.</li></ul>` },
+  ops: { t:"Operational Excellence", body:`<ul class="tight">
+    <li><strong>GenAIOps / LLMOps</strong>: version prompts, flows, and model deployments as code; promote through environments.</li>
+    <li><strong>Evaluations in CI/CD</strong> as release-blocking quality + safety gates; track eval scores like test coverage.</li>
+    <li><strong>IaC-owned provisioning</strong> (Bicep/Terraform module) so every project is compliant-by-default.</li>
+    <li><strong>Online evaluation</strong> + tracing in prod to detect drift, groundedness regression, and abuse.</li></ul>` },
+  perf: { t:"Performance Efficiency", body:`<ul class="tight">
+    <li><strong>Streaming responses</strong> for perceived latency; choose region close to users and data.</li>
+    <li><strong>PTU for consistent latency</strong> under load; load-balance across deployments to avoid hot-spotting.</li>
+    <li><strong>Retrieval tuning</strong>: vector index sizing, hybrid search, and chunking strategy drive both quality and latency.</li>
+    <li>Use the <strong>model leaderboard / benchmarks</strong> to pick the smallest model meeting the latency + quality bar.</li></ul>` }
+};
+function renderPillar(key){
+  const d = PILLARS[key];
+  document.getElementById('pillarDetail').innerHTML = `<h3 style="color:var(--accent)">${d.t}</h3>${d.body}`;
+}
+document.querySelectorAll('.pillar').forEach(p=>{
+  p.addEventListener('click', ()=>{
+    document.querySelectorAll('.pillar').forEach(x=>x.classList.remove('active'));
+    p.classList.add('active');
+    renderPillar(p.dataset.p);
+  });
+});
+renderPillar('rel');
+
+/* ---------- TOC scroll-spy ---------- */
+const links = [...document.querySelectorAll('nav.toc a')];
+const secs = links.map(l=>document.querySelector(l.getAttribute('href')));
+const spy = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      const id = '#'+e.target.id;
+      links.forEach(l=>l.classList.toggle('active', l.getAttribute('href')===id));
+    }
+  });
+},{ rootMargin:"-45% 0px -50% 0px" });
+secs.forEach(s=>s && spy.observe(s));
+
+/* ---------- scroll-to-top ---------- */
+const st = document.getElementById('scrollTop');
+addEventListener('scroll', ()=> st.classList.toggle('show', scrollY>600));
+st.addEventListener('click', ()=> scrollTo({top:0, behavior:'smooth'}));
+</script>
+</body>
+</html>
