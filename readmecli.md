@@ -78,11 +78,11 @@ Use the `<agent-name>` subagent to <describe the task in full detail>.
 **Examples:**
 
 ```
-Use the `security-reviewer` subagent to check C:\Users\pstib\Projects\tokenbestpractices for hardcoded secrets or insecure token handling.
+Use the `security-reviewer` subagent to check C:\Users\<username>\Projects\tokenbestpractices for hardcoded secrets or insecure token handling.
 ```
 
 ```
-Use the `doc-writer` subagent to write inline comments for every function in C:\Users\pstib\Projects\tokenbestpractices\utils.js.
+Use the `doc-writer` subagent to write inline comments for every function in C:\Users\<username>\Projects\tokenbestpractices\utils.js.
 ```
 
 **Tips:**
@@ -90,7 +90,7 @@ Use the `doc-writer` subagent to write inline comments for every function in C:\
 - Use `/agents` inside the REPL to browse available agents and see their descriptions before invoking.
 - Agents run at user scope, so they can access any project under your user profile unless further restricted.
 
-> **Your setup:** You have 16 subagents at user scope, stored in `C:\Users\pstib\.claude\agents\*.md`. They break down as 6 security agents, 7 dev/SDLC agents, and 3 docs agents. Manage them with `/agents` in the REPL.
+> **Your setup:** You have 16 subagents at user scope, stored in `C:\Users\<username>\.claude\agents\*.md`. They break down as 6 security agents, 7 dev/SDLC agents, and 3 docs agents. Manage them with `/agents` in the REPL.
 
 ---
 
@@ -105,19 +105,19 @@ MCP stands for Model Context Protocol — a standard that lets Claude connect to
 | Get details on one server | `claude mcp get <name>` | Shows the stored config for a specific server |
 | Remove a server | `claude mcp remove <name>` | Unregisters it; does not uninstall anything |
 
-**Config file location:** `C:\Users\pstib\.claude.json` (the `~` shorthand points here on Windows too)
+**Config file location:** `C:\Users\<username>\.claude.json` (the `~` shorthand points here on Windows too)
 
 **Example — adding a filesystem server scoped to your Projects folder:**
 
 ```powershell
-claude mcp add filesystem "npx @modelcontextprotocol/server-filesystem C:\Users\pstib\Projects"
+claude mcp add filesystem "npx @modelcontextprotocol/server-filesystem C:\Users\<username>\Projects"
 ```
 
 > **Your setup:** You have three MCP servers already configured:
 >
 > | Server | What it does |
 > |---|---|
-> | `filesystem` | Scoped to `C:\Users\pstib\Projects` — Claude can read/write files there |
+> | `filesystem` | Scoped to `C:\Users\<username>\Projects` — Claude can read/write files there |
 > | `memory` | Gives Claude a persistent key-value memory store across sessions |
 > | `github` | Remote-hosted, OAuth authenticated — lets Claude read/write GitHub repos |
 >
@@ -132,13 +132,13 @@ Headless mode lets you run Claude from a script or scheduled job without opening
 **Basic pattern:**
 
 ```powershell
-claude -p "Summarize the file at C:\Users\pstib\Projects\tokenbestpractices\readme.md in three bullet points."
+claude -p "Summarize the file at C:\Users\<username>\Projects\tokenbestpractices\readme.md in three bullet points."
 ```
 
 **Piping output to a file:**
 
 ```powershell
-claude -p "Review C:\Users\pstib\Projects\myapp\app.js for security issues." > C:\Users\pstib\Projects\myapp\review.txt
+claude -p "Review C:\Users\<username>\Projects\myapp\app.js for security issues." > C:\Users\<username>\Projects\myapp\review.txt
 ```
 
 ---
@@ -155,14 +155,14 @@ The built-in `/schedule` command and `CronCreate` tasks in Claude Code are **ses
 
 ```powershell
 # Run a Claude headless prompt every morning at 8:00 AM
-$action = New-ScheduledTaskAction -Execute "claude" -Argument '-p "Check C:\Users\pstib\Projects\tokenbestpractices for any TODO comments and log them." >> C:\Users\pstib\Projects\logs\daily-check.txt'
+$action = New-ScheduledTaskAction -Execute "claude" -Argument '-p "Check C:\Users\<username>\Projects\tokenbestpractices for any TODO comments and log them." >> C:\Users\<username>\Projects\logs\daily-check.txt'
 
 $trigger = New-ScheduledTaskTrigger -Daily -At "08:00AM"
 
 Register-ScheduledTask -TaskName "ClaudeDailyCheck" -Action $action -Trigger $trigger -RunLevel Highest
 ```
 
-> **Reality-check:** This assumes `claude` is on your system PATH. To confirm: open PowerShell and run `claude --version`. If you get an error, use the full path to the Claude executable instead (e.g., `C:\Users\pstib\AppData\...`). Also make sure your API key is available as an environment variable in the scheduled task's session — Task Scheduler does not always inherit your interactive shell's environment variables.
+> **Reality-check:** This assumes `claude` is on your system PATH. To confirm: open PowerShell and run `claude --version`. If you get an error, use the full path to the Claude executable instead (e.g., `C:\Users\<username>\AppData\...`). Also make sure your API key is available as an environment variable in the scheduled task's session — Task Scheduler does not always inherit your interactive shell's environment variables.
 
 **Alternative:** A cloud-side routine (GitHub Actions, Azure Logic Apps, etc.) calling `claude -p` via a CI runner is more reliable for overnight or recurring work.
 
@@ -176,7 +176,7 @@ Tokens are the units Claude "reads and writes" — context has a limit, and slop
 - **Plan before big changes.** Ask Claude to describe what it will do before it does it (e.g., "outline the changes you'd make to X, don't make them yet"). This catches misunderstandings cheaply.
 - **Use `/fast` on Opus when you want speed.** It does not lower the model quality — same Opus, faster output. Good for exploratory back-and-forth.
 - **Batch related work into one session.** "Review functions A, B, and C" in one prompt is more efficient than three separate prompts.
-- **Scope your MCP filesystem access tightly.** Your filesystem MCP is already scoped to `C:\Users\pstib\Projects`. Avoid broadening it — a narrower scope means Claude reads less irrelevant content per request.
+- **Scope your MCP filesystem access tightly.** Your filesystem MCP is already scoped to `C:\Users\<username>\Projects`. Avoid broadening it — a narrower scope means Claude reads less irrelevant content per request.
 - **Avoid going idle inside a long session.** Claude caches your prompt context for roughly 5 minutes of inactivity. If you step away longer than that, the cache may expire and tokens are re-billed on your next message. Either `/clear` and start fresh, or keep the pace up.
 
 ---

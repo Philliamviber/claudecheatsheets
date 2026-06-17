@@ -86,7 +86,7 @@ Good prompts give Claude a clear goal, the right constraints, and a way to know 
 Tell Claude what you want, what it should not do, and how you will know it worked.
 
 ```
-Refactor the `parseConfig` function in C:\Users\pstib\Projects\myapp\config.js
+Refactor the `parseConfig` function in C:\Users\<username>\Projects\myapp\config.js
 to handle missing keys gracefully. Do not change the function signature.
 The function should return a default value instead of throwing. Add a comment
 explaining each new guard clause.
@@ -97,7 +97,7 @@ explaining each new guard clause.
 Claude can read files directly. Give it a path and a line number rather than copying and pasting large blocks of code into chat.
 
 ```
-Look at C:\Users\pstib\Projects\myapp\utils.js lines 45–78.
+Look at C:\Users\<username>\Projects\myapp\utils.js lines 45–78.
 The `formatDate` function has an off-by-one error on leap years. Fix it.
 ```
 
@@ -120,7 +120,7 @@ If a task matches a specialist, say so explicitly. The agent starts cold — giv
 
 ```
 Use the `code-reviewer` subagent to review
-C:\Users\pstib\Projects\myapp\auth.js for security issues.
+C:\Users\<username>\Projects\myapp\auth.js for security issues.
 Focus on token validation and session handling.
 ```
 
@@ -187,7 +187,7 @@ Every time Claude completes a discrete change that works and you have reviewed i
 
 > **🔧 Your setup**
 >
-> Your filesystem MCP is scoped to `C:\Users\pstib\Projects`. Claude can read and write any file under that folder. Keeping your MCP scope narrow means Claude reads less irrelevant content per request — this is already configured correctly in `~\.claude.json`. Do not broaden it unless you have a specific reason.
+> Your filesystem MCP is scoped to `C:\Users\<username>\Projects`. Claude can read and write any file under that folder. Keeping your MCP scope narrow means Claude reads less irrelevant content per request — this is already configured correctly in `~\.claude.json`. Do not broaden it unless you have a specific reason.
 
 ---
 
@@ -340,7 +340,7 @@ npm test
 The VS Code extension gives you tools that make token efficiency easier than in a raw terminal session — use them.
 
 - **Highlight, don't paste.** Selecting code in the editor and asking a question in chat is cheaper and more precise than copying code into your message. The selection is sent automatically.
-- **Reference files by path.** Type or paste a file path in chat (`C:\Users\pstib\Projects\myapp\auth.js`) — Claude reads the file directly. Do not paste the entire file's contents unless Claude specifically needs content it cannot read from disk.
+- **Reference files by path.** Type or paste a file path in chat (`C:\Users\<username>\Projects\myapp\auth.js`) — Claude reads the file directly. Do not paste the entire file's contents unless Claude specifically needs content it cannot read from disk.
 - **Review diffs instead of asking Claude to re-explain.** After Claude edits a file, read the diff in Source Control. Do not ask Claude "what did you change?" — that costs tokens to answer something you can see for free.
 - **`/clear` between unrelated tasks.** Switching topics without clearing carries old context into the new task — wasted tokens and potential confusion.
 - **Mind the 5-minute prompt-cache window.** If you are running a multi-step task, keep the pace up. Pausing for more than 5 minutes causes the cache to expire, and the next message re-reads all the context from scratch (slower, more expensive). If you know you need a long break, finish the current step cleanly and `/clear` before you stop.

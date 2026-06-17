@@ -102,7 +102,7 @@ Dotted arrows show security gates being injected at every phase rather than only
 
 > **🔧 Your setup**
 >
-> Your bench has 16 agents stored at `C:\Users\pstib\.claude\agents\*.md` (user scope — available in every project). Manage them with the `/agents` command from the Claude Code CLI.
+> Your bench has 16 agents stored at `C:\Users\<username>\.claude\agents\*.md` (user scope — available in every project). Manage them with the `/agents` command from the Claude Code CLI.
 >
 > **Security (6):**
 > - `security-architect` — advisory + authoring; model `claude-opus-4-8`
@@ -369,11 +369,11 @@ Assign ongoing maintenance to `docs-maintainer`. Invoke it after each significan
 
 > **🔧 Your setup**
 >
-> Your memory layout lives at `C:\Users\pstib\.claude\projects\c--Users-pstib\memory\`. The index is `MEMORY.md`; fact files follow the pattern `memory/<topic>.md` with YAML frontmatter fields `name`, `description`, and `metadata.type`.
+> Your memory layout lives at `C:\Users\<username>\.claude\projects\c--Users-<username>\memory\`. The index is `MEMORY.md`; fact files follow the pattern `memory/<topic>.md` with YAML frontmatter fields `name`, `description`, and `metadata.type`.
 >
 > When building a project summary, give `docs-maintainer` the index path so it can selectively read only the relevant fact files. Example invocation:
 >
-> *"Use the `docs-maintainer` subagent to read `C:\Users\pstib\.claude\projects\c--Users-pstib\memory\MEMORY.md`, identify the fact files relevant to [project name], and draft a `project-summary.md` using the standard template."*
+> *"Use the `docs-maintainer` subagent to read `C:\Users\<username>\.claude\projects\c--Users-<username>\memory\MEMORY.md`, identify the fact files relevant to [project name], and draft a `project-summary.md` using the standard template."*
 
 ---
 
