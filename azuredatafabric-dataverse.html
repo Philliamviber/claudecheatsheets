@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Microsoft Fabric &amp; Dataverse — Architecture &amp; Security Deep Dive</title>
+<meta name="description" content="An interactive, AZ-500 / CISSP-level deep dive into the Microsoft data fabric (Microsoft Fabric / OneLake) and Dataverse: architecture, identity, networking, the Dataverse security model, and an opinionated security-hardening playbook." />
+<style>
+  :root {
+    --bg: #0a0f1e;
+    --bg-2: #101730;
+    --panel: #141c34;
+    --panel-2: #1a2340;
+    --line: #2a3556;
+    --txt: #e7ecf6;
+    --muted: #9aa6c4;
+    --accent: #36d399;       /* fabric/data green */
+    --accent-2: #4cc2ff;     /* azure cyan */
+    --accent-3: #7c5cff;     /* identity violet */
+    --accent-4: #ffb454;     /* warn amber */
+    --accent-5: #ff6b81;     /* risk red */
+    --shadow: 0 12px 40px rgba(0,0,0,.45);
+    --radius: 14px;
+    --mono: "Cascadia Code", "SF Mono", Consolas, monospace;
+    --sans: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; font-family: var(--sans); color: var(--txt);
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(54,211,153,.12), transparent 60%),
+      radial-gradient(900px 500px at 0% 10%, rgba(76,194,255,.12), transparent 55%),
+      var(--bg);
+    line-height: 1.6;
+  }
+  a { color: var(--accent-2); }
+
+  header.hero { padding: 64px 28px 40px; max-width: 1180px; margin: 0 auto; position: relative; }
+  .eyebrow {
+    display:inline-flex; align-items:center; gap:8px;
+    font-size:.8rem; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--accent); background:rgba(54,211,153,.08);
+    border:1px solid var(--line); padding:6px 14px; border-radius:999px;
+  }
+  h1 { font-size: clamp(2.1rem, 4.5vw, 3.4rem); line-height:1.08; margin:18px 0 10px; letter-spacing:-.02em; }
+  h1 .grad { background: linear-gradient(100deg, var(--accent), var(--accent-2) 70%); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .lede { font-size:1.15rem; color:var(--muted); max-width: 780px; }
+  .assume { margin-top: 22px; display:flex; flex-wrap:wrap; gap:10px; }
+  .assume span { font-size:.78rem; color:var(--muted); border:1px dashed var(--line); padding:5px 12px; border-radius:8px; background:rgba(255,255,255,.02); }
+
+  nav.toc { position: sticky; top: 0; z-index: 50; backdrop-filter: blur(10px); background: rgba(10,15,30,.82); border-bottom: 1px solid var(--line); }
+  nav.toc ul { display:flex; gap:4px; list-style:none; margin:0 auto; padding:8px 16px; max-width:1180px; overflow-x:auto; }
+  nav.toc a { white-space:nowrap; text-decoration:none; color:var(--muted); font-size:.86rem; padding:8px 13px; border-radius:8px; transition:.15s; }
+  nav.toc a:hover { color:var(--txt); background:var(--panel); }
+  nav.toc a.active { color:var(--txt); background:var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 10px 28px 80px; }
+  section { padding: 46px 0 14px; scroll-margin-top: 64px; }
+  section > h2 { font-size: clamp(1.5rem, 3vw, 2.1rem); margin:0 0 6px; letter-spacing:-.01em; display:flex; align-items:center; gap:12px; }
+  section > h2 .num { font-family:var(--mono); font-size:.95rem; color:var(--accent); border:1px solid var(--line); border-radius:8px; padding:3px 10px; background:var(--panel); }
+  .section-sub { color:var(--muted); margin:0 0 24px; max-width:840px; }
+
+  .card { background: linear-gradient(180deg, var(--panel), var(--bg-2)); border:1px solid var(--line); border-radius:var(--radius); padding:22px 24px; box-shadow:var(--shadow); }
+  .grid { display:grid; gap:18px; }
+  .g2 { grid-template-columns: repeat(2, 1fr); }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 860px){ .g2,.g3 { grid-template-columns:1fr; } }
+
+  h3 { margin:0 0 8px; font-size:1.12rem; }
+  h4 { margin:18px 0 6px; font-size:1rem; color:var(--accent); }
+  p { margin:8px 0; }
+  ul.tight { margin:8px 0; padding-left:20px; }
+  ul.tight li { margin:4px 0; }
+  code { font-family:var(--mono); font-size:.86em; background:rgba(76,194,255,.12); padding:2px 6px; border-radius:6px; color:#bfe6ff; }
+  .pill { display:inline-block; font-size:.72rem; padding:3px 9px; border-radius:999px; border:1px solid var(--line); color:var(--muted); margin:2px 4px 2px 0; }
+  .pill.green{ color:var(--accent); border-color:rgba(54,211,153,.4); background:rgba(54,211,153,.07);}
+  .pill.cyan{ color:var(--accent-2); border-color:rgba(76,194,255,.4); background:rgba(76,194,255,.07);}
+  .pill.violet{ color:#bdacff; border-color:rgba(124,92,255,.4); background:rgba(124,92,255,.08);}
+  .pill.amber{ color:var(--accent-4); border-color:rgba(255,180,84,.4); background:rgba(255,180,84,.07);}
+  .pill.red{ color:var(--accent-5); border-color:rgba(255,107,129,.4); background:rgba(255,107,129,.07);}
+
+  .callout { border-left:3px solid var(--accent-2); background:rgba(76,194,255,.06); padding:12px 16px; border-radius:0 10px 10px 0; margin:14px 0; }
+  .callout.sec { border-left-color: var(--accent-3); background:rgba(124,92,255,.07); }
+  .callout.warn { border-left-color: var(--accent-4); background:rgba(255,180,84,.06); }
+  .callout.risk { border-left-color: var(--accent-5); background:rgba(255,107,129,.06); }
+  .callout strong { color:var(--txt); }
+
+  .tabs { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 16px; }
+  .tab-btn { cursor:pointer; border:1px solid var(--line); background:var(--panel); color:var(--muted); padding:9px 15px; border-radius:10px; font-size:.88rem; transition:.15s; }
+  .tab-btn:hover { color:var(--txt); }
+  .tab-btn.active { color:var(--txt); border-color:var(--accent); background:var(--panel-2); box-shadow:0 0 0 1px rgba(54,211,153,.3); }
+  .tab-panel { display:none; animation: fade .25s ease; }
+  .tab-panel.active { display:block; }
+  @keyframes fade { from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
+
+  .acc { border:1px solid var(--line); border-radius:12px; overflow:hidden; margin:10px 0; background:var(--panel); }
+  .acc summary { cursor:pointer; padding:14px 18px; font-weight:600; list-style:none; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .acc summary::-webkit-details-marker { display:none; }
+  .acc summary .chev { transition:.2s; color:var(--accent); }
+  .acc[open] summary .chev { transform:rotate(90deg); }
+  .acc .acc-body { padding:0 18px 16px; color:var(--muted); }
+  .acc .acc-body p, .acc .acc-body li { color:var(--muted); }
+
+  table { width:100%; border-collapse:collapse; margin:12px 0; font-size:.9rem; }
+  th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--accent); font-weight:600; background:rgba(54,211,153,.04); }
+  tr:hover td { background:rgba(255,255,255,.02); }
+
+  .diagram-wrap { display:grid; grid-template-columns: 1.45fr .85fr; gap:18px; align-items:start; }
+  @media (max-width: 980px){ .diagram-wrap { grid-template-columns:1fr; } }
+  .svg-stage { background:radial-gradient(700px 400px at 50% 0, rgba(54,211,153,.07), transparent), var(--bg-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px; }
+  .node { cursor:pointer; transition:.18s; }
+  .node rect, .node circle { transition:.18s; }
+  .node:hover rect, .node.sel rect { stroke:var(--accent); stroke-width:2.2; filter:drop-shadow(0 0 8px rgba(54,211,153,.5)); }
+  .node text { pointer-events:none; }
+  .flow { stroke-dasharray:6 6; animation: dash 1.2s linear infinite; }
+  @keyframes dash { to { stroke-dashoffset:-24; } }
+  .info-panel { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:18px 20px; min-height:280px; }
+  .info-panel h3 { color:var(--accent); }
+  .info-panel .ph { color:var(--muted); }
+  .legend { display:flex; flex-wrap:wrap; gap:14px; margin-top:12px; font-size:.8rem; color:var(--muted); }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .swatch { width:13px; height:13px; border-radius:4px; display:inline-block; }
+
+  .pillar-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
+  @media (max-width:860px){ .pillar-grid { grid-template-columns:repeat(2,1fr);} }
+  .pillar { cursor:pointer; text-align:center; padding:16px 10px; border-radius:12px; border:1px solid var(--line); background:var(--panel); transition:.15s; }
+  .pillar:hover { transform:translateY(-2px); }
+  .pillar.active { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent), var(--shadow); background:var(--panel-2); }
+  .pillar .ico { font-size:1.6rem; }
+  .pillar .nm { font-size:.82rem; margin-top:6px; }
+  .pillar-detail { margin-top:16px; }
+
+  .ladder { display:flex; flex-direction:column; gap:0; }
+  .rung { display:grid; grid-template-columns: 170px 1fr; gap:18px; padding:16px 0; border-bottom:1px dashed var(--line); align-items:start; }
+  @media (max-width:680px){ .rung { grid-template-columns:1fr; gap:6px; } }
+  .rung .layer { font-weight:700; color:var(--accent); }
+  .rung .layer small { display:block; color:var(--muted); font-weight:400; font-size:.8rem; }
+
+  /* hardening checklist */
+  .check { display:flex; gap:12px; align-items:flex-start; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--panel); margin:8px 0; transition:.15s; }
+  .check:hover { border-color:var(--accent); }
+  .check .box { flex:0 0 22px; height:22px; border:2px solid var(--accent); border-radius:6px; margin-top:2px; display:grid; place-items:center; cursor:pointer; user-select:none; color:transparent; font-weight:700; }
+  .check.done .box { background:var(--accent); color:#06210f; }
+  .check.done .ctext { opacity:.55; text-decoration:line-through; }
+  .check .ctext strong { color:var(--txt); }
+  .check .sev { font-size:.66rem; padding:2px 8px; border-radius:999px; margin-left:8px; vertical-align:middle; }
+  .sev.crit { background:rgba(255,107,129,.15); color:var(--accent-5); border:1px solid rgba(255,107,129,.4); }
+  .sev.high { background:rgba(255,180,84,.15); color:var(--accent-4); border:1px solid rgba(255,180,84,.4); }
+  .sev.med { background:rgba(76,194,255,.12); color:var(--accent-2); border:1px solid rgba(76,194,255,.4); }
+  .progress { height:10px; border-radius:999px; background:var(--panel-2); overflow:hidden; border:1px solid var(--line); margin:6px 0 18px; }
+  .progress > i { display:block; height:100%; width:0; background:linear-gradient(90deg,var(--accent),var(--accent-2)); transition:width .3s; }
+
+  footer { border-top:1px solid var(--line); margin-top:40px; padding:28px; text-align:center; color:var(--muted); font-size:.85rem; }
+  .scroll-top { position:fixed; right:22px; bottom:22px; z-index:60; border:1px solid var(--line); background:var(--panel); color:var(--txt); border-radius:12px; padding:10px 14px; cursor:pointer; opacity:0; pointer-events:none; transition:.2s; }
+  .scroll-top.show { opacity:1; pointer-events:auto; }
+  .toggle-note { font-size:.8rem; color:var(--muted); margin-top:8px; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <span class="eyebrow">◆ Cloud Ops Field Guide</span>
+  <h1>Microsoft Fabric &amp; Dataverse<br /><span class="grad">Architecture &amp; Security Deep Dive</span></h1>
+  <p class="lede">The SaaS data estate — one lake, every workload, and the low-code data backbone underneath Power Platform. How OneLake and Dataverse fit together, where the trust boundaries are, and an opinionated hardening playbook for both.</p>
+  <div class="assume">
+    <span>Audience: Entra ID fluent</span>
+    <span>AZ-500 level</span>
+    <span>CISSP level</span>
+    <span>Assumes Purview / Power Platform familiarity</span>
+    <span>Self-contained · works offline</span>
+  </div>
+</header>
+
+<nav class="toc" id="toc">
+  <ul>
+    <li><a href="#footprint">1 · Data Estate</a></li>
+    <li><a href="#whatis">2 · Fabric &amp; Dataverse</a></li>
+    <li><a href="#architecture">3 · Architecture</a></li>
+    <li><a href="#identity">4 · Identity &amp; Roles</a></li>
+    <li><a href="#dvsecurity">5 · Dataverse Security</a></li>
+    <li><a href="#network">6 · Network</a></li>
+    <li><a href="#hardening">7 · Hardening Playbook</a></li>
+    <li><a href="#wellarch">8 · Well-Architected</a></li>
+    <li><a href="#monitoring">9 · Monitoring</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<!-- ============ 1. ESTATE ============ -->
+<section id="footprint">
+  <h2><span class="num">01</span> The Microsoft data estate — and where these two sit</h2>
+  <p class="section-sub">Microsoft's data story converged on two SaaS pillars: <strong>Microsoft Fabric</strong> (analytics, with <strong>OneLake</strong> as the single logical lake) and <strong>Dataverse</strong> (the transactional, low-code data backbone under Power Platform &amp; Dynamics 365). Both are tenant-scoped, Entra-governed, and increasingly stitched together by open Delta-Parquet and Purview.</p>
+
+  <div class="card">
+    <div class="ladder">
+      <div class="rung">
+        <div class="layer">Consumption<small>Read &amp; decide</small></div>
+        <div>
+          <p style="margin-top:0">Power BI reports, Dynamics 365 apps, Copilot for Power BI / Fabric. The faces business users see. Governed by sensitivity labels, RLS, and sharing controls — but they consume models they don't own.</p>
+          <span class="pill cyan">Power BI</span><span class="pill cyan">D365 apps</span><span class="pill cyan">Copilot</span>
+        </div>
+      </div>
+      <div class="rung">
+        <div class="layer">Low-code apps<small>Build over data</small></div>
+        <div>
+          <p style="margin-top:0"><strong>Power Apps, Power Automate, Copilot Studio</strong> over <strong>Dataverse</strong>. Citizen + pro developers; the place DLP policy and Managed Environments earn their keep, because the blast radius is "any connector to anywhere."</p>
+          <span class="pill violet">Dataverse</span><span class="pill violet">Connectors + DLP</span>
+        </div>
+      </div>
+      <div class="rung">
+        <div class="layer">★ Microsoft Fabric<small>Unify &amp; analyze</small></div>
+        <div>
+          <p style="margin-top:0"><strong>The analytics SaaS.</strong> Data Factory, Data Engineering (Spark), Data Warehouse, Real-Time Intelligence, Data Science, Databases, and Power BI — all writing to <strong>one capacity</strong> and <strong>one lake</strong>. You own workspaces, security, networking, and labels.</p>
+          <span class="pill green">OneLake</span><span class="pill green">Workspaces</span><span class="pill green">Capacity (F SKU)</span><span class="pill green">Open Delta format</span>
+        </div>
+      </div>
+      <div class="rung">
+        <div class="layer">★ OneLake<small>Single source of truth</small></div>
+        <div>
+          <p style="margin-top:0">One tenant-wide logical data lake on ADLS Gen2, Delta-Parquet by default. <strong>Shortcuts</strong> reference external/other-domain data without copying; <strong>Mirroring</strong> replicates external DBs; <strong>Link to Fabric</strong> surfaces Dataverse tables here with no ETL.</p>
+          <span class="pill green">No-copy shortcuts</span><span class="pill green">Mirroring</span><span class="pill green">OneSecurity</span>
+        </div>
+      </div>
+      <div class="rung">
+        <div class="layer">Governance &amp; platform<small>Spans everything</small></div>
+        <div>
+          <p style="margin-top:0"><strong>Microsoft Purview</strong> (catalog, lineage, sensitivity labels, DLP, audit), <strong>Entra ID</strong>, and the underlying Azure storage/compute fabric. The control plane that makes the two pillars governable as one estate.</p>
+          <span class="pill amber">Purview</span><span class="pill amber">Entra</span><span class="pill amber">Defender</span>
+        </div>
+      </div>
+    </div>
+    <div class="callout sec">
+      <strong>CISSP lens — data, not infra, is the asset here.</strong> Both are SaaS: Microsoft owns the patching, the hosts, the hypervisor. Your shared-responsibility surface collapses almost entirely onto <em>identity, authorization, classification, network exposure, and monitoring</em>. Get the data-access model wrong and no amount of platform security saves you.
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2. WHAT THEY ARE ============ -->
+<section id="whatis">
+  <h2><span class="num">02</span> What Fabric and Dataverse actually are</h2>
+  <p class="section-sub">Two different shapes of data platform that increasingly share a lake. Know the primitives before you secure them.</p>
+
+  <div class="tabs" role="tablist">
+    <div class="tab-btn active" data-tab="t-workloads">Fabric workloads</div>
+    <div class="tab-btn" data-tab="t-onelake">OneLake &amp; capacity</div>
+    <div class="tab-btn" data-tab="t-dataverse">Dataverse primitives</div>
+    <div class="tab-btn" data-tab="t-link">How they connect</div>
+  </div>
+
+  <div class="tab-panel active" id="t-workloads">
+    <div class="card">
+      <h3>One capacity, seven workloads</h3>
+      <table>
+        <tr><th>Workload</th><th>Does</th><th>Lineage</th></tr>
+        <tr><td>Data Factory</td><td>Ingest + transform (pipelines, dataflows Gen2)</td><td>ADF / Power Query</td></tr>
+        <tr><td>Data Engineering</td><td>Spark notebooks, lakehouses</td><td>Synapse Spark</td></tr>
+        <tr><td>Data Warehouse</td><td>T-SQL warehouse, open Delta storage</td><td>Synapse SQL</td></tr>
+        <tr><td>Real-Time Intelligence</td><td>Eventstreams + KQL Eventhouse</td><td>Azure Data Explorer</td></tr>
+        <tr><td>Data Science</td><td>ML experiments, models, MLflow</td><td>Azure ML</td></tr>
+        <tr><td>Databases</td><td>SQL database in Fabric (OLTP)</td><td>Azure SQL</td></tr>
+        <tr><td>Power BI</td><td>Semantic models + reports</td><td>Power BI</td></tr>
+      </table>
+      <p class="toggle-note">All bill against a single <strong>Fabric capacity (F SKU)</strong> — a shared, burstable compute pool. Capacity is a governance &amp; cost boundary, not a security boundary.</p>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="t-onelake">
+    <div class="card">
+      <h3>OneLake — "OneDrive for data"</h3>
+      <ul class="tight">
+        <li><strong>One per tenant</strong>, hierarchical: tenant → workspaces → items (lakehouses, warehouses) → files/tables in Delta-Parquet.</li>
+        <li><strong>Shortcuts</strong>: reference data in ADLS Gen2, S3, GCS, Dataverse, or another workspace <em>without copying</em> — powerful and a governance trap (data crosses boundaries by reference).</li>
+        <li><strong>Mirroring</strong>: near-real-time replicas of Azure SQL, Cosmos DB, Snowflake into OneLake.</li>
+        <li><strong>OneLake security (OneSecurity)</strong>: define table/row/column security once at the lake, enforced across engines.</li>
+        <li>Open format means external tools (and external risk) can read it — classification + access control matter more, not less.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="t-dataverse">
+    <div class="card">
+      <h3>Dataverse — the structured backbone</h3>
+      <div class="grid g2">
+        <div>
+          <h4>Containers</h4>
+          <ul class="tight">
+            <li><strong>Environments</strong> — the top isolation boundary (dev/test/prod, geo, with/without a Dataverse DB).</li>
+            <li><strong>Solutions</strong> — ALM packaging of tables, apps, flows.</li>
+            <li><strong>Tables / columns / relationships</strong> — the relational model; standard + custom.</li>
+          </ul>
+        </div>
+        <div>
+          <h4>Access primitives</h4>
+          <ul class="tight">
+            <li><strong>Business units</strong> + <strong>security roles</strong> (privilege × access level).</li>
+            <li><strong>Teams</strong> (owner / access / Entra-group / managed).</li>
+            <li><strong>Field-level security</strong>, hierarchy security, record sharing.</li>
+          </ul>
+        </div>
+      </div>
+      <p class="toggle-note">Dataverse is OLTP and permission-rich — its security model (§5) is far more granular than Fabric's workspace roles, and it's where most real-world over-permissioning hides.</p>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="t-link">
+    <div class="card">
+      <h3>Stitching the two together</h3>
+      <ul class="tight">
+        <li><strong>Link to Microsoft Fabric</strong> — surfaces Dataverse tables as OneLake shortcuts: zero-ETL, near-real-time, analytics-ready. The modern path (replaces Export to Data Lake).</li>
+        <li><strong>Azure Synapse Link for Dataverse</strong> — continuous export of Dataverse to ADLS Gen2 / Synapse for teams not yet on Fabric.</li>
+        <li><strong>Virtual tables</strong> — Dataverse reads external sources live without import.</li>
+        <li><strong>Dual-write</strong> — bi-directional sync between Dataverse and Dynamics 365 F&amp;O.</li>
+      </ul>
+      <div class="callout warn"><strong>Hardening note:</strong> Link to Fabric inherits Dataverse <em>schema</em> but <strong>not</strong> its row/field security automatically — once data lands in OneLake, re-apply classification and OneLake/workspace access control or you've quietly widened the audience.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 3. ARCHITECTURE ============ -->
+<section id="architecture">
+  <h2><span class="num">03</span> Reference architecture — click the diagram</h2>
+  <p class="section-sub">A governed Fabric + Dataverse estate with private networking and Purview governance. Click any node for its role, the boundary it enforces, and the controls to attach. Animated dashes show the primary data path from source → lake → consumption.</p>
+
+  <div class="diagram-wrap">
+    <div class="svg-stage">
+      <svg viewBox="0 0 720 560" width="100%" role="img" aria-label="Microsoft Fabric and Dataverse reference architecture">
+        <defs>
+          <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#36d399"/>
+          </marker>
+        </defs>
+
+        <rect x="14" y="14" width="692" height="92" rx="12" fill="rgba(124,92,255,.06)" stroke="#2a3556"/>
+        <text x="28" y="36" fill="#bdacff" font-size="12" font-family="monospace">SOURCES  ·  operational + low-code</text>
+
+        <rect x="14" y="120" width="692" height="300" rx="12" fill="rgba(54,211,153,.05)" stroke="#2a3556"/>
+        <text x="28" y="142" fill="#36d399" font-size="12" font-family="monospace">MICROSOFT FABRIC  ·  one capacity · OneLake</text>
+
+        <rect x="14" y="434" width="692" height="74" rx="12" fill="rgba(76,194,255,.05)" stroke="#2a3556"/>
+        <text x="28" y="456" fill="#4cc2ff" font-size="12" font-family="monospace">CONSUMPTION + GOVERNANCE</text>
+
+        <!-- sources -->
+        <g class="node" data-key="dataverse">
+          <rect x="40" y="46" width="170" height="44" rx="9" fill="#1a2340" stroke="#7c5cff"/>
+          <text x="125" y="67" fill="#e7ecf6" font-size="12.5" text-anchor="middle">Dataverse</text>
+          <text x="125" y="82" fill="#9aa6c4" font-size="10" text-anchor="middle">Power Platform / D365</text>
+        </g>
+        <g class="node" data-key="extsrc">
+          <rect x="280" y="46" width="170" height="44" rx="9" fill="#1b2542" stroke="#3a4670"/>
+          <text x="365" y="67" fill="#e7ecf6" font-size="12.5" text-anchor="middle">Azure SQL · Cosmos</text>
+          <text x="365" y="82" fill="#9aa6c4" font-size="10" text-anchor="middle">on-prem · S3 · SaaS</text>
+        </g>
+        <g class="node" data-key="mpe">
+          <rect x="510" y="46" width="170" height="44" rx="9" fill="#152e2a" stroke="#2f6b58"/>
+          <text x="595" y="67" fill="#e7ecf6" font-size="12.5" text-anchor="middle">Managed Priv. Endpt</text>
+          <text x="595" y="82" fill="#9aa6c4" font-size="10" text-anchor="middle">private outbound</text>
+        </g>
+
+        <!-- fabric -->
+        <g class="node" data-key="df">
+          <rect x="40" y="160" width="150" height="50" rx="9" fill="#1b2542" stroke="#3a4670"/>
+          <text x="115" y="181" fill="#e7ecf6" font-size="12" text-anchor="middle">Data Factory</text>
+          <text x="115" y="197" fill="#9aa6c4" font-size="9.5" text-anchor="middle">ingest / mirror / link</text>
+        </g>
+        <g class="node" data-key="onelake">
+          <rect x="225" y="225" width="270" height="64" rx="10" fill="#13352a" stroke="#36d399"/>
+          <text x="360" y="252" fill="#e7ecf6" font-size="14" text-anchor="middle" font-weight="bold">OneLake</text>
+          <text x="360" y="271" fill="#9aa6c4" font-size="10" text-anchor="middle">Delta-Parquet · shortcuts · OneSecurity</text>
+        </g>
+        <g class="node" data-key="engineering">
+          <rect x="40" y="320" width="150" height="50" rx="9" fill="#1b2542" stroke="#3a4670"/>
+          <text x="115" y="341" fill="#e7ecf6" font-size="12" text-anchor="middle">Lakehouse / Spark</text>
+          <text x="115" y="357" fill="#9aa6c4" font-size="9.5" text-anchor="middle">Data Engineering</text>
+        </g>
+        <g class="node" data-key="warehouse">
+          <rect x="285" y="320" width="150" height="50" rx="9" fill="#1b2542" stroke="#3a4670"/>
+          <text x="360" y="341" fill="#e7ecf6" font-size="12" text-anchor="middle">Warehouse</text>
+          <text x="360" y="357" fill="#9aa6c4" font-size="9.5" text-anchor="middle">T-SQL · RLS/CLS</text>
+        </g>
+        <g class="node" data-key="rti">
+          <rect x="530" y="320" width="150" height="50" rx="9" fill="#1b2542" stroke="#3a4670"/>
+          <text x="605" y="341" fill="#e7ecf6" font-size="12" text-anchor="middle">Real-Time Intel</text>
+          <text x="605" y="357" fill="#9aa6c4" font-size="9.5" text-anchor="middle">KQL Eventhouse</text>
+        </g>
+        <g class="node" data-key="workspace">
+          <rect x="530" y="160" width="150" height="50" rx="9" fill="#1b2542" stroke="#3a4670"/>
+          <text x="605" y="181" fill="#e7ecf6" font-size="12" text-anchor="middle">Workspace</text>
+          <text x="605" y="197" fill="#9aa6c4" font-size="9.5" text-anchor="middle">roles · identity</text>
+        </g>
+
+        <!-- consumption -->
+        <g class="node" data-key="powerbi">
+          <rect x="40" y="460" width="180" height="40" rx="9" fill="#1b2542" stroke="#3a4670"/>
+          <text x="130" y="485" fill="#e7ecf6" font-size="12.5" text-anchor="middle">Power BI · Copilot</text>
+        </g>
+        <g class="node" data-key="purview">
+          <rect x="270" y="460" width="180" height="40" rx="9" fill="#2a2440" stroke="#7c5cff"/>
+          <text x="360" y="485" fill="#bdacff" font-size="12.5" text-anchor="middle">Purview · labels · DLP</text>
+        </g>
+        <g class="node" data-key="entra">
+          <rect x="500" y="460" width="180" height="40" rx="9" fill="#2a2440" stroke="#7c5cff"/>
+          <text x="590" y="485" fill="#bdacff" font-size="12.5" text-anchor="middle">Entra ID · CA · PIM</text>
+        </g>
+
+        <!-- flows -->
+        <line class="flow" x1="125" y1="90" x2="180" y2="222" stroke="#36d399" stroke-width="2" marker-end="url(#arrow)"/>
+        <line class="flow" x1="365" y1="90" x2="115" y2="158" stroke="#36d399" stroke-width="2" marker-end="url(#arrow)"/>
+        <line class="flow" x1="115" y1="210" x2="225" y2="245" stroke="#36d399" stroke-width="2" marker-end="url(#arrow)"/>
+        <line x1="225" y1="270" x2="190" y2="322" stroke="#36d399" stroke-width="1.6" marker-end="url(#arrow)"/>
+        <line x1="360" y1="289" x2="360" y2="318" stroke="#36d399" stroke-width="1.6" marker-end="url(#arrow)"/>
+        <line x1="495" y1="262" x2="530" y2="330" stroke="#36d399" stroke-width="1.6" marker-end="url(#arrow)"/>
+        <line class="flow" x1="360" y1="370" x2="135" y2="458" stroke="#4cc2ff" stroke-width="2" marker-end="url(#arrow)"/>
+        <line x1="595" y1="90" x2="430" y2="225" stroke="#2f6b58" stroke-width="1.4" stroke-dasharray="3 4"/>
+      </svg>
+      <div class="legend">
+        <span><i class="swatch" style="background:rgba(124,92,255,.5)"></i>Sources / governance</span>
+        <span><i class="swatch" style="background:rgba(54,211,153,.5)"></i>Fabric / OneLake</span>
+        <span><i class="swatch" style="background:rgba(76,194,255,.5)"></i>Consumption</span>
+        <span><i class="swatch" style="background:#36d399"></i>Animated = primary path</span>
+      </div>
+    </div>
+
+    <div class="info-panel" id="infoPanel">
+      <h3>Inspect a component</h3>
+      <p class="ph">Click any box in the diagram. Its role, the boundary it enforces, and the controls you should attach appear here.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4. IDENTITY ============ -->
+<section id="identity">
+  <h2><span class="num">04</span> Identity, workspace roles &amp; service principals</h2>
+  <p class="section-sub">Both pillars authenticate through Entra ID. Fabric authorizes coarsely at the workspace, then finely at the data; Dataverse authorizes through a deep role model (§5). The first hardening win is replacing per-user grants with Entra-group-backed roles.</p>
+
+  <div class="grid g2">
+    <div class="card">
+      <h3>Fabric workspace roles</h3>
+      <table>
+        <tr><th>Role</th><th>Grants</th></tr>
+        <tr><td><strong>Admin</strong></td><td>Full control incl. access mgmt + delete workspace</td></tr>
+        <tr><td><strong>Member</strong></td><td>Add others (≤ Member), share items, edit</td></tr>
+        <tr><td><strong>Contributor</strong></td><td>Create/edit items; no access mgmt</td></tr>
+        <tr><td><strong>Viewer</strong></td><td>Read built reports / query with RLS applied</td></tr>
+      </table>
+      <p class="toggle-note">Workspace roles grant <em>broad</em> data access. For least privilege, keep most users at Viewer and enforce row/column security at the lake/warehouse, not the workspace.</p>
+    </div>
+    <div class="card">
+      <h3>Non-human identity</h3>
+      <ul class="tight">
+        <li><strong>Workspace identity</strong> — a managed identity for the Fabric workspace; use it for trusted access to ADLS/Key Vault instead of stored credentials.</li>
+        <li><strong>Service principals</strong> — for CI/CD and automation; gate behind a tenant setting that limits <em>which</em> security groups may use SPN access.</li>
+        <li><strong>Dataverse application users</strong> — register the SPN as an application user with a least-privilege security role; never reuse the System Administrator role for integrations.</li>
+        <li>Prefer <strong>workload identity federation</strong> over client secrets for pipelines; if a secret is unavoidable, store it in Key Vault with rotation.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout sec"><strong>Conditional Access is the front door for both.</strong> Power BI/Fabric and Power Platform are CA-targetable cloud apps. Require MFA + compliant device, block legacy auth, and consider sign-in-risk policies. CA is the single highest-leverage control over this entire estate.</div>
+</section>
+
+<!-- ============ 5. DATAVERSE SECURITY ============ -->
+<section id="dvsecurity">
+  <h2><span class="num">05</span> The Dataverse security model — layer by layer</h2>
+  <p class="section-sub">Dataverse access is the intersection of several independent layers. A user can do something only if <em>every</em> layer permits it. Understanding the order is the difference between least privilege and an accidental tenant-wide read.</p>
+
+  <details class="acc" open>
+    <summary>1 · Environment &amp; business units <span class="chev">▶</span></summary>
+    <div class="acc-body"><p>The <strong>environment</strong> is the outermost boundary — separate dev/test/prod and, where law requires, by geography. Within it, <strong>business units</strong> form a hierarchy that scopes data ownership. Access levels (User → BU → parent-child BU → Organization) are defined relative to this tree, so BU design directly shapes how wide "Business Unit"-level access reaches.</p></div>
+  </details>
+  <details class="acc">
+    <summary>2 · Security roles (privilege × access level) <span class="chev">▶</span></summary>
+    <div class="acc-body"><p>A security role is a matrix: for each table and each action (Create/Read/Write/Delete/Append/AppendTo/Assign/Share) it sets an <strong>access level</strong>. Roles are <em>additive</em> — a user's effective rights are the union of all assigned roles, so a single over-broad role silently elevates everyone who also holds it. Audit for <code>Organization</code>-level Read on sensitive tables.</p></div>
+  </details>
+  <details class="acc">
+    <summary>3 · Teams &amp; Entra group teams <span class="chev">▶</span></summary>
+    <div class="acc-body"><p>Assign roles to <strong>teams</strong>, not individuals, for scale. <strong>Entra group teams</strong> bind a Dataverse team to an Entra security group so membership (and therefore access) is governed in one place — the recommended pattern for joiner/mover/leaver hygiene.</p></div>
+  </details>
+  <details class="acc">
+    <summary>4 · Field (column) security <span class="chev">▶</span></summary>
+    <div class="acc-body"><p>For sensitive columns (SSNs, comp, health), enable <strong>column security</strong> and grant via a <strong>column security profile</strong> — independent of table-level rights. This is how you let users see a record but not its most sensitive fields.</p></div>
+  </details>
+  <details class="acc">
+    <summary>5 · Hierarchy security &amp; record sharing <span class="chev">▶</span></summary>
+    <div class="acc-body"><p><strong>Hierarchy security</strong> (manager/position) grants managers visibility into reports' records. <strong>Record sharing</strong> grants ad-hoc access to specific rows — convenient but invisible to role audits, so monitor and prefer team ownership over sprawling shares.</p></div>
+  </details>
+
+  <div class="callout warn"><strong>Effective access = environment ∩ security roles ∩ field security ∩ (sharing/hierarchy).</strong> Review it from the data outward ("who can read table X?"), not the user inward — the additive role model makes user-by-user review miss aggregate exposure.</div>
+</section>
+
+<!-- ============ 6. NETWORK ============ -->
+<section id="network">
+  <h2><span class="num">06</span> Network isolation — for a SaaS you don't host</h2>
+  <p class="section-sub">You can't put a SaaS in your VNet, but you can control how traffic reaches and leaves it. Fabric and Dataverse expose distinct private-networking controls — know which applies where.</p>
+
+  <div class="grid g2">
+    <div class="card">
+      <h3>Microsoft Fabric</h3>
+      <ul class="tight">
+        <li><strong>Private Link (inbound)</strong> — tenant/workspace-level private endpoint so users reach Fabric only over your network; pair with the tenant setting to <em>block public internet access</em>.</li>
+        <li><strong>Managed Private Endpoints (outbound)</strong> — Fabric reaches your private data sources (Azure SQL, Storage) without public exposure.</li>
+        <li><strong>Trusted workspace access</strong> + workspace identity — let firewalled ADLS Gen2 trust a specific Fabric workspace.</li>
+        <li><strong>Managed VNet</strong> isolates Spark compute. Note: enabling Private Link has feature trade-offs — validate workloads.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Dataverse / Power Platform</h3>
+      <ul class="tight">
+        <li><strong>IP firewall</strong> — restrict Dataverse access to known IP ranges; <strong>IP cookie binding</strong> to resist token replay from other IPs.</li>
+        <li><strong>VNet support (subnet delegation)</strong> — route Power Platform outbound (plug-ins, connectors) through your VNet for egress control.</li>
+        <li><strong>Tenant isolation</strong> — block inbound/outbound cross-tenant connector traffic to stop data exfil to foreign tenants.</li>
+        <li><strong>Customer Lockbox</strong> — require explicit approval before Microsoft engineers can access your data during support.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout"><strong>Shortcuts &amp; connectors cross boundaries by design.</strong> A OneLake shortcut or a Power Platform connector can pull data across the network perimeter you just built. Network controls are necessary but not sufficient — pair them with DLP (connectors) and shortcut governance (OneLake).</div>
+</section>
+
+<!-- ============ 7. HARDENING PLAYBOOK ============ -->
+<section id="hardening">
+  <h2><span class="num">07</span> Security hardening playbook</h2>
+  <p class="section-sub">An opinionated, prioritized checklist. Tick items off — progress saves to this browser. Severity reflects blast radius if skipped, not effort to implement.</p>
+
+  <div class="progress"><i id="bar"></i></div>
+  <p class="toggle-note" id="progressTxt" style="margin-top:-10px"></p>
+
+  <div class="tabs" role="tablist">
+    <div class="tab-btn active" data-tab="h-identity">Identity &amp; access</div>
+    <div class="tab-btn" data-tab="h-tenant">Tenant &amp; governance</div>
+    <div class="tab-btn" data-tab="h-data">Data protection</div>
+    <div class="tab-btn" data-tab="h-network">Network</div>
+    <div class="tab-btn" data-tab="h-monitor">Detect &amp; respond</div>
+  </div>
+
+  <div class="tab-panel active" id="h-identity" data-checklist></div>
+  <div class="tab-panel" id="h-tenant" data-checklist></div>
+  <div class="tab-panel" id="h-data" data-checklist></div>
+  <div class="tab-panel" id="h-network" data-checklist></div>
+  <div class="tab-panel" id="h-monitor" data-checklist></div>
+</section>
+
+<!-- ============ 8. WELL-ARCHITECTED ============ -->
+<section id="wellarch">
+  <h2><span class="num">08</span> Well-Architected — data-platform edition</h2>
+  <p class="section-sub">The five pillars, mapped to Fabric + Dataverse design decisions. Select a pillar.</p>
+  <div class="pillar-grid" id="pillars">
+    <div class="pillar active" data-p="rel"><div class="ico">🛡️</div><div class="nm">Reliability</div></div>
+    <div class="pillar" data-p="sec"><div class="ico">🔐</div><div class="nm">Security</div></div>
+    <div class="pillar" data-p="cost"><div class="ico">💰</div><div class="nm">Cost</div></div>
+    <div class="pillar" data-p="ops"><div class="ico">⚙️</div><div class="nm">Operational Ex.</div></div>
+    <div class="pillar" data-p="perf"><div class="ico">⚡</div><div class="nm">Performance</div></div>
+  </div>
+  <div class="card pillar-detail" id="pillarDetail"></div>
+</section>
+
+<!-- ============ 9. MONITORING ============ -->
+<section id="monitoring">
+  <h2><span class="num">09</span> Monitoring, audit &amp; incident response</h2>
+  <p class="section-sub">SaaS means you can't read host logs — your visibility comes from the platform's own audit streams. Wire them to a SIEM and treat them as your only timeline.</p>
+  <div class="grid g3">
+    <div class="card"><h3>Audit sources</h3><ul class="tight">
+      <li><strong>Purview / M365 audit log</strong> — Fabric &amp; Power BI activity events (view, export, share, permission change).</li>
+      <li><strong>Dataverse auditing</strong> — record + field change history and access logs; enable per-table.</li>
+      <li><strong>Power Platform activity logging</strong> &amp; admin analytics.</li>
+      <li><strong>Capacity Metrics app</strong> for Fabric throttling/health.</li>
+    </ul></div>
+    <div class="card"><h3>Detection</h3><ul class="tight">
+      <li><strong>Microsoft Defender for Cloud Apps</strong> — anomaly + session policies over Power BI/Fabric.</li>
+      <li>Forward audit logs to <strong>Microsoft Sentinel</strong>; alert on mass export, sharing to externals, role escalation, DLP override.</li>
+      <li>Watch for new <strong>shortcuts</strong> to external storage and new <strong>tenant-isolation exceptions</strong>.</li>
+    </ul></div>
+    <div class="card"><h3>Respond</h3><ul class="tight">
+      <li>Pre-stage runbooks: revoke sharing, disable SPN, quarantine environment, rotate keys/CMK.</li>
+      <li><strong>Customer Lockbox</strong> approvals are themselves an audit event — review them.</li>
+      <li>Use environment/workspace as a containment boundary; have an export-blocking break-glass DLP policy ready.</li>
+    </ul></div>
+  </div>
+
+  <div class="callout sec" style="margin-top:18px">
+    <strong>The one-paragraph takeaway.</strong> Fabric and Dataverse hand you a unified, open, tenant-wide data estate — and with SaaS, almost your entire security job collapses onto identity, authorization, classification, exposure, and monitoring. Back roles with Entra groups and Conditional Access, harden the tenant with Managed Environments + DLP + tenant isolation, classify and encrypt the data (labels, CMK, RLS/CLS/field security), pull the perimeter in with Private Link and managed endpoints, and stream every audit log to Sentinel. Do that and one lake serving every workload becomes an asset you can defend — not a single pane of glass into everything you failed to lock down.
+  </div>
+</section>
+
+</main>
+
+<button class="scroll-top" id="scrollTop" aria-label="Back to top">↑ Top</button>
+
+<footer>
+  Microsoft Fabric &amp; Dataverse Architecture &amp; Security Deep Dive · interactive field guide · self-contained HTML5.<br/>
+  Feature names, tenant settings, and role definitions evolve quickly — verify specifics against current Microsoft Learn / Power Platform &amp; Fabric admin docs before a design review or production change.
+</footer>
+
+<script>
+/* ---------- node details ---------- */
+const NODES = {
+  dataverse: { t:"Dataverse", b:"The transactional, low-code data backbone under Power Platform and Dynamics 365. Deep, additive security model (business units, security roles, teams, field security). A primary source into the lake via Link to Fabric — but its row/field security does NOT follow the data into OneLake automatically.", c:["Environments","Security roles","Field security","Link to Fabric"] },
+  extsrc: { t:"External data sources", b:"Azure SQL, Cosmos DB, on-prem databases, S3/GCS, SaaS apps. Reach them privately via Managed Private Endpoints or mirror/shortcut them into OneLake. Each connection is a boundary crossing — govern with DLP and least-privilege credentials (workspace identity, not stored secrets).", c:["Mirroring","Shortcuts","Managed PE"] },
+  mpe: { t:"Managed Private Endpoint", b:"Fabric's outbound private connectivity to your data sources, so ingestion traffic never traverses the public internet. Paired with workspace identity and trusted workspace access, it lets a firewalled ADLS Gen2 trust a specific Fabric workspace.", c:["Private outbound","No public exposure","Workspace identity"] },
+  df: { t:"Data Factory", b:"Ingestion and transformation: pipelines, dataflows Gen2, mirroring, and Link to Fabric orchestration. The on-ramp to OneLake. Secure source connections with least-privilege credentials and route them through managed private endpoints.", c:["Pipelines","Dataflows Gen2","Ingestion"] },
+  onelake: { t:"OneLake", b:"The single tenant-wide logical lake (ADLS Gen2, Delta-Parquet). Shortcuts reference data without copying; OneSecurity defines table/row/column rules enforced across engines. Open format = external tools can read it, so classification and access control matter more, not less. Govern shortcut creation tightly.", c:["Delta-Parquet","No-copy shortcuts","OneSecurity","Tenant-wide"] },
+  engineering: { t:"Lakehouse / Spark", b:"Data Engineering workload: Spark notebooks over a lakehouse. Spark runs in a managed VNet. Apply OneLake security and treat notebook code as a supply-chain surface (library governance, no embedded secrets — use Key Vault / workspace identity).", c:["Lakehouse","Spark","Managed VNet"] },
+  warehouse: { t:"Warehouse", b:"T-SQL warehouse on open Delta storage. Enforce row-level security (RLS), column-level security (CLS), object-level security, and dynamic data masking here — this is the fine-grained authorization layer beneath the coarse workspace roles.", c:["RLS","CLS","Dynamic masking"] },
+  rti: { t:"Real-Time Intelligence", b:"Eventstreams feeding a KQL Eventhouse (Azure Data Explorer lineage) for streaming analytics. Apply RLS in KQL, control ingestion identities, and watch retention/PII in high-velocity streams.", c:["Eventstream","KQL","Streaming RLS"] },
+  workspace: { t:"Workspace", b:"The Fabric container and primary access boundary: Admin / Member / Contributor / Viewer roles. Carries a workspace identity (managed identity) for trusted source access. Keep most users at Viewer and push fine-grained control down to the data layer.", c:["4 roles","Workspace identity","Access boundary"] },
+  powerbi: { t:"Power BI · Copilot", b:"The consumption surface. Sensitivity labels flow with semantic models and exports; RLS scopes what each viewer sees. Govern external sharing, export, and 'publish to web' via tenant settings — these are the top data-leak vectors.", c:["Sensitivity labels","RLS at view","Sharing controls"] },
+  purview: { t:"Microsoft Purview", b:"The governance plane spanning both pillars: data catalog, end-to-end lineage, sensitivity labels (MIP) with encryption, DLP policies, and the unified audit log. Classification here is what makes downstream access control and monitoring meaningful.", c:["Catalog + lineage","Sensitivity labels","DLP","Audit log"] },
+  entra: { t:"Entra ID", b:"The identity foundation for the whole estate. Conditional Access (MFA, compliant device, block legacy auth, sign-in risk) is the highest-leverage control. PIM for admin roles; Entra group teams to govern Dataverse access; workload identity federation for automation.", c:["Conditional Access","PIM","Group-backed roles"] }
+};
+const panel = document.getElementById('infoPanel');
+document.querySelectorAll('.node').forEach(n=>{
+  n.addEventListener('click', ()=>{
+    document.querySelectorAll('.node').forEach(x=>x.classList.remove('sel'));
+    n.classList.add('sel');
+    const d = NODES[n.dataset.key]; if(!d) return;
+    panel.innerHTML = `<h3>${d.t}</h3><p>${d.b}</p><div>${d.c.map(x=>`<span class="pill green">${x}</span>`).join('')}</div>`;
+  });
+});
+
+/* ---------- tabs ---------- */
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const wrap = btn.closest('section');
+    wrap.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    wrap.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+  });
+});
+
+/* ---------- hardening checklist ---------- */
+const CHECKS = {
+  "h-identity": [
+    ["crit","Enforce Conditional Access on Power BI/Fabric & Power Platform","Require MFA + compliant device; block legacy auth. The single highest-leverage control over the estate."],
+    ["crit","Back all roles with Entra security groups","Use Entra group teams in Dataverse and group-assigned workspace roles — govern joiner/mover/leaver in one place."],
+    ["high","PIM for admin roles","Make Fabric Admin, Power Platform Admin, and environment Admin eligible-only with approval + justification."],
+    ["high","Least-privilege service principals","Register SPNs as Dataverse application users with scoped roles; never reuse System Administrator. Gate Fabric SPN access by group."],
+    ["med","Prefer workload identity federation over secrets","Eliminate stored client secrets in pipelines; if unavoidable, Key Vault + rotation."]
+  ],
+  "h-tenant": [
+    ["crit","Turn on Managed Environments","Sharing limits, usage insights, and pipelines for governed Power Platform environments."],
+    ["crit","Author DLP policies for connectors","Classify connectors Business / Non-Business / Blocked; block public/unsanctioned connectors in the default environment."],
+    ["high","Enable tenant isolation","Block cross-tenant inbound/outbound connector traffic to prevent exfil to foreign tenants."],
+    ["high","Lock down the default environment","Restrict who can create environments; clean up the sprawled default environment; restrict org-wide sharing."],
+    ["med","Review Fabric tenant settings","Disable publish-to-web, restrict external sharing, control SPN usage, guest access, and export settings."]
+  ],
+  "h-data": [
+    ["crit","Apply sensitivity labels (MIP) end to end","Label + encrypt sensitive data so protection follows it through Fabric, exports, and Power BI."],
+    ["crit","Re-apply security after Link to Fabric","Dataverse row/field security does NOT follow into OneLake — set OneLake/workspace access + RLS on landed data."],
+    ["high","Enforce RLS / CLS / OLS + dynamic masking","Fine-grained authorization in the warehouse/lakehouse and KQL, beneath coarse workspace roles."],
+    ["high","Field-level security on sensitive columns","Use Dataverse column security profiles for SSNs, comp, health, etc."],
+    ["med","Customer-managed keys (CMK)","Bring your own key for Fabric capacity and Dataverse encryption where policy requires key control."]
+  ],
+  "h-network": [
+    ["high","Private Link for inbound Fabric access","Reach Fabric over your network; pair with blocking public internet access at the tenant."],
+    ["high","Managed Private Endpoints for sources","Keep ingestion off the public internet; use trusted workspace access + workspace identity."],
+    ["high","Dataverse IP firewall + IP cookie binding","Restrict access to known ranges and resist token replay across IPs."],
+    ["med","Power Platform VNet (subnet delegation)","Route plug-in/connector egress through your VNet for outbound control."],
+    ["med","Govern OneLake shortcuts","Treat external shortcuts as boundary crossings; review and restrict who can create them."]
+  ],
+  "h-monitor": [
+    ["crit","Enable Dataverse auditing","Turn on record + field change and access logging on sensitive tables."],
+    ["crit","Stream audit logs to Sentinel","Forward Purview/M365 + Power Platform activity; alert on mass export, external sharing, role escalation."],
+    ["high","Defender for Cloud Apps over Power BI/Fabric","Anomaly + session policies for risky behavior and downloads."],
+    ["high","Enable Customer Lockbox","Require explicit approval before Microsoft support can access your data; review the approvals."],
+    ["med","Pre-stage IR runbooks","Revoke sharing, disable SPN, quarantine environment, break-glass export-blocking DLP."]
+  ]
+};
+function renderChecks(){
+  Object.entries(CHECKS).forEach(([panelId, items])=>{
+    const el = document.getElementById(panelId);
+    el.innerHTML = items.map((it,i)=>{
+      const id = panelId+"-"+i;
+      const done = localStorage.getItem("fd-"+id)==="1";
+      return `<div class="check ${done?'done':''}" data-id="${id}">
+        <div class="box" role="checkbox" aria-checked="${done}">✓</div>
+        <div class="ctext"><strong>${it[1]}</strong> <span class="sev ${it[0]}">${it[0].toUpperCase()}</span><br/><span style="color:var(--muted)">${it[2]}</span></div>
+      </div>`;
+    }).join('');
+  });
+  document.querySelectorAll('.check .box').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const row = b.closest('.check'); const id = row.dataset.id;
+      row.classList.toggle('done');
+      localStorage.setItem("fd-"+id, row.classList.contains('done')?"1":"0");
+      updateBar();
+    });
+  });
+}
+function updateBar(){
+  const total = Object.values(CHECKS).reduce((a,b)=>a+b.length,0);
+  let done = 0;
+  Object.entries(CHECKS).forEach(([p,items])=>items.forEach((_,i)=>{ if(localStorage.getItem("fd-"+p+"-"+i)==="1") done++; }));
+  const pct = Math.round(done/total*100);
+  document.getElementById('bar').style.width = pct+"%";
+  document.getElementById('progressTxt').textContent = `${done} / ${total} controls applied (${pct}%) — saved in this browser.`;
+}
+renderChecks(); updateBar();
+
+/* ---------- WAF pillars ---------- */
+const PILLARS = {
+  rel: { t:"Reliability", body:`<ul class="tight">
+    <li><strong>Capacity sizing &amp; smoothing</strong>: Fabric throttles on overload — monitor with the Capacity Metrics app and right-size F SKUs; isolate critical workloads on their own capacity.</li>
+    <li><strong>Environment strategy</strong> for Dataverse: separate dev/test/prod with ALM pipelines so a bad deploy can't take prod down.</li>
+    <li><strong>Geo &amp; BCDR</strong>: choose regions deliberately; understand platform-native backup/restore and replication for Dataverse and OneLake.</li>
+    <li>Design ingestion for <strong>idempotent retries</strong>; mirror/shortcut rather than fragile copy jobs.</li></ul>` },
+  sec: { t:"Security", body:`<ul class="tight">
+    <li><strong>Identity first</strong>: Conditional Access, Entra-group-backed roles, PIM, least-privilege SPNs (see the hardening playbook).</li>
+    <li><strong>Classify then control</strong>: sensitivity labels + DLP, RLS/CLS/field security, CMK.</li>
+    <li><strong>Pull the perimeter in</strong>: Private Link, managed private endpoints, Dataverse IP firewall, tenant isolation.</li>
+    <li><strong>Watch the boundary-crossers</strong>: shortcuts and connectors move data across perimeters — govern both explicitly.</li></ul>` },
+  cost: { t:"Cost Optimization", body:`<ul class="tight">
+    <li><strong>One capacity, shared cost</strong>: capacity is the cost boundary — tag workspaces to capacities for chargeback/showback.</li>
+    <li><strong>Right-size F SKUs</strong> and pause/scale where supported; avoid over-provisioning for peak.</li>
+    <li><strong>Shortcuts &amp; mirroring over copies</strong> cut storage and ETL compute.</li>
+    <li>Govern environment/workspace sprawl — unused Dataverse environments and orphaned workspaces are silent cost + risk.</li></ul>` },
+  ops: { t:"Operational Excellence", body:`<ul class="tight">
+    <li><strong>ALM with solutions + pipelines</strong> (Dataverse) and <strong>Fabric Git integration + deployment pipelines</strong> — everything as code, promoted through environments.</li>
+    <li><strong>Managed Environments</strong> for governance signals and guardrails.</li>
+    <li><strong>Audit + Capacity Metrics</strong> wired to dashboards and alerts.</li>
+    <li>Standardize provisioning so every workspace/environment is compliant-by-default.</li></ul>` },
+  perf: { t:"Performance Efficiency", body:`<ul class="tight">
+    <li><strong>Delta optimization</strong>: V-Order, partitioning, file compaction in the lakehouse/warehouse.</li>
+    <li><strong>DirectLake</strong> mode in Power BI reads OneLake directly — fast at scale when modeled well.</li>
+    <li><strong>Right engine for the job</strong>: warehouse for T-SQL, KQL for telemetry, Spark for big transforms.</li>
+    <li>Push down RLS/CLS efficiently; avoid row-explosion in security predicates.</li></ul>` }
+};
+function renderPillar(key){ const d = PILLARS[key]; document.getElementById('pillarDetail').innerHTML = `<h3 style="color:var(--accent)">${d.t}</h3>${d.body}`; }
+document.querySelectorAll('.pillar').forEach(p=>{
+  p.addEventListener('click', ()=>{
+    document.querySelectorAll('.pillar').forEach(x=>x.classList.remove('active'));
+    p.classList.add('active'); renderPillar(p.dataset.p);
+  });
+});
+renderPillar('rel');
+
+/* ---------- TOC scroll-spy ---------- */
+const links = [...document.querySelectorAll('nav.toc a')];
+const secs = links.map(l=>document.querySelector(l.getAttribute('href')));
+const spy = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{ if(e.isIntersecting){ const id='#'+e.target.id; links.forEach(l=>l.classList.toggle('active', l.getAttribute('href')===id)); } });
+},{ rootMargin:"-45% 0px -50% 0px" });
+secs.forEach(s=>s && spy.observe(s));
+
+/* ---------- scroll-to-top ---------- */
+const st = document.getElementById('scrollTop');
+addEventListener('scroll', ()=> st.classList.toggle('show', scrollY>600));
+st.addEventListener('click', ()=> scrollTo({top:0, behavior:'smooth'}));
+</script>
+</body>
+</html>
